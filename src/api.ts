@@ -1,7 +1,7 @@
-import * as Remark from 'annotatedtext-remark';
 import { endpointFromUrl, LTSettings } from './settings';
 import { RequestUrlParam, RequestUrlResponse, requestUrl } from "obsidian";
 import { JSONPath } from "jsonpath-plus";
+import { AnnotatedText } from "./annotated";
 
 /** LanguageTool Check API: https://languagetool.org/http-api/swagger-ui */
 export namespace api {
@@ -24,28 +24,10 @@ export namespace api {
 	export async function check(
 		settings: LTSettings,
 		offset: number,
-		text: string,
+		annotated: AnnotatedText,
 		language?: string,
 	): Promise<LTMatch[]> {
-		const parsedText = Remark.build(text, {
-			...Remark.defaults,
-			interpretmarkup(text = ''): string {
-				// Don't collapse inline code
-				if (/^`[^`]+`$/.test(text)) {
-					return text;
-				}
-				const linebreaks = '\n'.repeat(text.match(/\n/g)?.length ?? 0);
-
-				// Support lists (annotation ends with marker)
-				if (text.match(/^\s*(-|\d+\.) $/m)) {
-					return linebreaks + '• '; // this is the character, the online editor uses
-				}
-
-				return linebreaks;
-			},
-		});
-
-		const data = JSON.stringify(parsedText);
+		const data = annotated.stringify();
 
 		const lang = (language ?? settings.staticLanguage) ?? 'auto';
 		const params: { [key: string]: string } = {
@@ -95,7 +77,7 @@ export namespace api {
 			const from = jsonPath<number>("$.offset@number()", match);
 			const to = from + jsonPath<number>("$.length@number()", match);
 			return {
-				text: text.slice(from, to),
+				text: annotated.extractSlice(from, to) || "",
 				from: offset + from,
 				to: offset + to,
 				title: jsonPath<string>("$.shortMessage@string()", match),

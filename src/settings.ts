@@ -38,7 +38,7 @@ const endpoints = {
 	premium: new Endpoint('https://api.languagetoolplus.com', 80, 75000),
 	custom: new Endpoint('', 120, 1000000),
 };
-type EndpointType = keyof typeof endpoints;
+export type EndpointType = keyof typeof endpoints;
 
 export function endpointFromUrl(url: string): EndpointType {
 	for (const [key, value] of Object.entries(endpoints)) {

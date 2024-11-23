@@ -46,7 +46,10 @@
         "typescript-eslint": "^8.19.1"
     },
     "dependencies": {
-        "annotatedtext-remark": "^1.0.10",
-        "jsonpath-plus": "^10.1.0"
+        "jsonpath-plus": "^10.1.0",
+        "remark-frontmatter": "^5.0.0",
+        "remark-gfm": "^4.0.0",
+        "remark-parse": "^11.0.0",
+        "unified": "^11.0.5"
     }
 }
