@@ -371,6 +371,15 @@ export class LTSettingsTab extends PluginSettingTab {
 			)
 			.addDropdown(component => {
 				this.languageListeners.push(async languages => {
+					// API states: For languages with variants (English, German, Portuguese)
+					// spell checking will only be activated when you specify the variant,
+					// e.g. en-GB instead of just en.
+					// Therefore we remove base languages (en, de, pt) that have other variants.
+					let staticLang = languages.filter(v =>
+						v.longCode.length > 2 ||
+						v.longCode !== v.code ||
+						languages.filter(l => l.code == v.code).length <= 1);
+
 					// Clear options
 					while (component.selectEl.options.length > 0) {
 						component.selectEl.remove(0);
@@ -378,7 +387,7 @@ export class LTSettingsTab extends PluginSettingTab {
 
 					component
 						.addOption('auto', 'Auto Detect')
-						.addOptions(Object.fromEntries(languages.map(v => [v.longCode, v.name])))
+						.addOptions(Object.fromEntries(staticLang.map(v => [v.longCode, v.name])))
 						.setValue(settings.staticLanguage ?? 'auto')
 						.onChange(async value => {
 							settings.staticLanguage = value !== "auto" ? value : undefined;
