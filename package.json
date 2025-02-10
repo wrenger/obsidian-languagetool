@@ -1,6 +1,6 @@
 {
     "name": "obsidian-languagetool",
-    "version": "1.0.13",
+    "version": "1.0.14",
     "description": "Unofficial integration of the LanguageTool spell and grammar checker.",
     "main": "main.js",
     "scripts": {
