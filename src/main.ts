@@ -4,7 +4,7 @@ import { ChangeSpec, StateEffect } from '@codemirror/state';
 import { DEFAULT_SETTINGS, endpointFromUrl, LTSettings, LTSettingsTab } from './settings';
 import { api } from './api';
 import { buildUnderlineExtension } from './cm6/underlineExtension';
-import { LTRange, addUnderline, clearAllUnderlines, clearUnderlinesInRange, underlineField } from './cm6/underlineStateField';
+import { LTRange, addUnderline, clearAllUnderlines, clearUnderlinesInRange, underlineField } from './cm6/underlineField';
 import { syntaxTree } from "@codemirror/language";
 import { cmpIgnoreCase, setDifference, setIntersect, setUnion } from "./helpers";
 
