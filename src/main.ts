@@ -325,15 +325,16 @@ export default class LanguageToolPlugin extends Plugin {
 			range = { ...selection };
 		}
 
-		let offset = 0;
-		let text = '';
-		if (range) {
-			range = increaseSelection(editor, range);
-			offset = range.from;
-			text = editor.state.sliceDoc(range.from, range.to);
-		} else {
-			text = editor.state.sliceDoc(0);
-		}
+		// let offset = 0;
+		// let text = '';
+		// if (range) {
+		// 	range = increaseSelection(editor, range);
+		// 	offset = range.from;
+		// 	text = editor.state.sliceDoc(range.from, range.to);
+		// } else {
+		// 	text = editor.state.sliceDoc(0);
+		// }
+		let text = editor.state.sliceDoc();
 
 		if (!text.trim())
 			return;
@@ -342,7 +343,7 @@ export default class LanguageToolPlugin extends Plugin {
 		try {
 			this.setStatusBarWorking();
 
-			let annotations = await markdown.parseAndAnnotate(text);
+			let { offset, annotations } = await markdown.parseAndAnnotate(text, range);
 			// reduce request size
 			annotations.optimize();
 

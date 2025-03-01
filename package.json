@@ -47,9 +47,10 @@
     },
     "dependencies": {
         "jsonpath-plus": "^10.1.0",
-        "remark-frontmatter": "^5.0.0",
-        "remark-gfm": "^4.0.0",
-        "remark-parse": "^11.0.0",
-        "unified": "^11.0.5"
+        "mdast-util-from-markdown": "^2.0.2",
+        "mdast-util-frontmatter": "^2.0.1",
+        "mdast-util-gfm": "^3.1.0",
+        "micromark-extension-frontmatter": "^2.0.0",
+        "micromark-extension-gfm": "^3.0.0"
     }
 }

@@ -21,7 +21,7 @@ export class AnnotatedText {
         let output: Annotation[] = [];
         for (let a of this.annotations) {
             if (("text" in a && a.text.length === 0) ||
-                ("markup" in a && a.markup.length === 0 && a.interpretAs === undefined))
+                ("markup" in a && a.markup.length === 0 && !a.interpretAs))
                 continue;
 
             let last = output.at(-1);
@@ -30,13 +30,26 @@ export class AnnotatedText {
             } else {
                 if ("text" in last && "text" in a) {
                     last.text += a.text;
-                } else if ("markup" in last && "markup" in a && last.interpretAs === undefined) {
+                } else if ("markup" in last && "markup" in a) {
                     last.markup += a.markup;
-                    last.interpretAs = a.interpretAs;
+                    if (last.interpretAs && a.interpretAs)
+                        last.interpretAs += a.interpretAs;
+                    else if (a.interpretAs)
+                        last.interpretAs = a.interpretAs;
                 } else {
                     output.push(a);
                 }
             }
+        }
+        for (let a of output) {
+            if ("markup" in a && a.interpretAs) {
+                // replace more than two new lines with two new lines
+                a.interpretAs = a.interpretAs.replace(/\n{3,}/g, "\n\n");
+            }
+        }
+        // remove markup from the end
+        for (let a = output.at(-1); a && "markup" in a; a = output.at(-1)){
+            output.pop();
         }
         this.annotations = output;
     }
