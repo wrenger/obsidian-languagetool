@@ -16,8 +16,8 @@ export class AnnotatedText {
         this.annotations.push({ markup, interpretAs });
     }
 
-    /** Merge compatible annotations to reduce the length */
-    optimize() {
+    /** Merge compatible annotations to reduce the length, returning the start offset */
+    optimize(): number {
         let output: Annotation[] = [];
         for (let a of this.annotations) {
             if (("text" in a && a.text.length === 0) ||
@@ -51,7 +51,14 @@ export class AnnotatedText {
         for (let a = output.at(-1); a && "markup" in a; a = output.at(-1)){
             output.pop();
         }
+        // remove markup from the start
+        let offset = 0;
+        for (let a = output.at(0); a && "markup" in a; a = output.at(0)){
+            offset += a.markup.length;
+            output.shift();
+        }
         this.annotations = output;
+        return offset;
     }
 
     /** Extract a subslice from the annotated text, ignoring any markup */

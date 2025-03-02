@@ -1,21 +1,31 @@
-import type { RootContent, BlockContent, Text } from "mdast";
-import type { Position } from "unist";
-import { AnnotatedText } from "./annotated.js";
+import type { RootContent, BlockContent, Text } from 'mdast';
+import type { Position } from 'unist';
+import { AnnotatedText } from './annotated.js';
 
 import { fromMarkdown } from 'mdast-util-from-markdown'
-import { gfm } from "micromark-extension-gfm";
-import { gfmFromMarkdown } from "mdast-util-gfm";
-import { frontmatter } from "micromark-extension-frontmatter";
-import { frontmatterFromMarkdown } from "mdast-util-frontmatter";
-import { LTRange } from "./cm6/underlineField.js";
+import { gfm } from 'micromark-extension-gfm';
+import { gfmFromMarkdown } from 'mdast-util-gfm';
+import { frontmatter } from 'micromark-extension-frontmatter';
+import { frontmatterFromMarkdown } from 'mdast-util-frontmatter';
+import { LTRange } from './cm6/underlineField.js';
+import { wikiLink } from './markdown/micromark-wikilink.js';
+import { wikiLinkFromMarkdown } from './markdown/mdast-wikilink.js';
 
 export namespace markdown {
     export async function parseAndAnnotate(
         text: string, range?: LTRange
     ): Promise<{ offset: number, annotations: AnnotatedText }> {
         let tree = fromMarkdown(text, {
-            extensions: [gfm(), frontmatter(["yaml"])],
-            mdastExtensions: [gfmFromMarkdown(), frontmatterFromMarkdown(["yaml"])],
+            extensions: [
+                gfm(),
+                frontmatter(['yaml']),
+                wikiLink({ aliasDivider: '|' }),
+            ],
+            mdastExtensions: [
+                gfmFromMarkdown(),
+                frontmatterFromMarkdown(['yaml']),
+                wikiLinkFromMarkdown(),
+            ],
         });
 
         let annotator = new AnnotationVisitor(text, range);
@@ -40,7 +50,7 @@ export namespace markdown {
 
         visitText(node: Text, indent: number) {
             const position = node.position!!;
-            const textLen = node.value.length + (node.value.split("\n").length - 1) * indent;
+            const textLen = node.value.length + (node.value.split('\n').length - 1) * indent;
             const nodeLen = position.end.offset!! - position.start.offset!!;
             if (textLen < nodeLen) {
                 // There are probably escape characters
@@ -53,14 +63,14 @@ export namespace markdown {
                     let start = match.index!!;
                     // Could span over multiple lines
                     addLines(slice.slice(offset, start), indent, this.output);
-                    this.output.pushMarkup(" ", ""); // backslash character
+                    this.output.pushMarkup(' ', ''); // backslash character
                     this.output.pushText(slice.slice(start + 1, start + 2));
                     offset = start + 2;
                 }
                 addLines(slice.slice(offset), indent, this.output);
             } else if (textLen > nodeLen) {
-                console.error("Invalid length", textLen, nodeLen, JSON.stringify(node, undefined, "  "));
-                throw Error("Markdown parsing: invalid text length");
+                console.error('Invalid length', textLen, nodeLen, JSON.stringify(node, undefined, '  '));
+                throw Error('Markdown parsing: invalid text length');
             } else {
                 // Default: no escapes
                 addLines(node.value, indent, this.output);
@@ -70,7 +80,7 @@ export namespace markdown {
 
         visitRoot(node: RootContent, indent: number) {
             if (node.position == null)
-                throw Error("Markdown parsing: unknown position");
+                throw Error('Markdown parsing: unknown position');
 
             const position = node.position!!;
 
@@ -89,91 +99,92 @@ export namespace markdown {
                     this.output = new AnnotatedText();
                     this.offset = position.start.offset!!;
                     this.output_start = this.offset;
-                    console.log("Start from", this.output_start);
+                    console.log('Start from', this.output_start);
                 }
 
                 // Block containing end
                 if (position.start.offset!! <= this.range.to && this.range.to <= position.end.offset!!) {
                     this.output_end = position.end.offset!!;
-                    console.log("End at", this.output_end);
+                    console.log('End at', this.output_end);
                 }
             }
 
             // Padding
             if (this.offset < position.start.offset!!) {
-                this.output.pushMarkup(" ".repeat(position.start.offset!! - this.offset));
+                this.output.pushMarkup(' '.repeat(position.start.offset!! - this.offset));
                 this.offset = position.start.offset!!;
             }
 
             switch (node.type) {
-                case "text":
+                case 'text':
                     this.visitText(node, indent);
                     break;
-                case "yaml":
-                case "code":
-                case "html":
-                case "image":
-                case "imageReference":
-                case "footnoteReference":
-                case "definition":
+                case 'yaml':
+                case 'code':
+                case 'html':
+                case 'image':
+                case 'imageReference':
+                case 'footnoteReference':
+                case 'definition':
                     break;
-                case "strong":
-                case "emphasis":
-                case "delete":
-                case "footnoteDefinition":
-                case "linkReference":
+                case 'strong':
+                case 'emphasis':
+                case 'delete':
+                case 'footnoteDefinition':
+                case 'linkReference':
                     node.children.forEach(child => this.visitRoot(child, indent));
                     break;
-                case "list":
-                case "heading":
+                case 'list':
+                case 'heading':
                     node.children.forEach(child => this.visitRoot(child, indent));
-                    this.output.pushMarkup("", "\n\n");
+                    this.output.pushMarkup('', '\n\n');
                     break;
-                case "inlineCode":
+                case 'inlineCode':
                     this.output.pushMarkup(emptyMarkup(position), node.value);
                     this.offset = position.end.offset!!;
                     break;
-                case "break":
-                    this.output.pushMarkup(emptyMarkup(position), "\n");
+                case 'break':
+                    this.output.pushMarkup(emptyMarkup(position), '\n');
                     this.offset = position.end.offset!!;
                     break;
-                case "blockquote":
-                case "paragraph":
+                case 'blockquote':
+                case 'paragraph':
                     if (node.children.length > 0) {
                         let indent = node.children[0].position!!.start.column - 1;
                         node.children.forEach(child => this.visitRoot(child, indent));
-                        this.output.pushMarkup("", "\n\n");
+                        this.output.pushMarkup('', '\n\n');
                     }
                     break;
-                case "listItem":
+                case 'listItem':
                     if (node.children.length > 0) {
-                        this.output.pushMarkup("", "• ");
+                        this.output.pushMarkup('', '• ');
                         let indent = node.children[0].position!!.start.column - 1;
                         node.children.forEach(child => this.visitRoot(child, indent));
                     }
                     break;
-                case "link":
+                case 'link':
+                case 'wikiLink':
                     if (node.children) {
                         node.children.forEach(child => this.visitRoot(child, indent));
                     } else {
-                        this.output.pushMarkup(emptyMarkup(position), "DUMMY");
+                        this.output.pushMarkup(emptyMarkup(position), 'DUMMY');
                         this.offset = position.end.offset!!;
                     }
                     break;
-                case "table":
-                    this.output.pushMarkup("", "\n");
+                case 'table':
+                    this.output.pushMarkup('', '\n');
                     node.children.forEach(child => this.visitRoot(child, indent));
                     break;
-                case "tableRow":
+                case 'tableRow':
                     node.children.forEach(child => this.visitRoot(child, indent));
-                    this.output.pushMarkup("", "\n\n");
+                    this.output.pushMarkup('', '\n\n');
                     break;
-                case "tableCell":
+                case 'tableCell':
                     node.children.forEach(child => this.visitRoot(child, indent));
-                    this.output.pushMarkup("", "\n");
+                    this.output.pushMarkup('', '\n');
                     break;
-                case "thematicBreak":
-                    this.output.pushMarkup(emptyMarkup(position), "\n\n");
+                case 'thematicBreak':
+                    this.output.pushMarkup(emptyMarkup(position), '\n\n');
                     this.offset = position.end.offset!!;
                     break;
             }
@@ -182,20 +193,21 @@ export namespace markdown {
     }
 
     function addLines(text: string, indent: number, output: AnnotatedText) {
-        let [first, ...reminder] = text.split("\n");
+        let [first, ...reminder] = text.split('\n');
         output.pushText(first);
         for (const line of reminder) {
-            output.pushMarkup(" ".repeat(indent));
-            output.pushText("\n" + line);
+            output.pushMarkup(' '.repeat(indent));
+            output.pushText('\n' + line);
         }
     }
 
     function emptyMarkup(pos: Position): string {
-        return " ".repeat(pos.end.offset!! - pos.start.offset!!);
+        return ' '.repeat(pos.end.offset!! - pos.start.offset!!);
     }
 
     function isBlock(node: RootContent): node is BlockContent {
-        return ["blockquote", "code", "heading", "html", "list", "paragraph", "table", "thematicBreak"].contains(node.type);
+        return ['blockquote', 'code', 'heading', 'html', 'list', 'paragraph',
+            'table', 'thematicBreak'].contains(node.type);
     }
 };
 

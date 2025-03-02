@@ -5,7 +5,7 @@ import { Tree } from '@lezer/common';
 import { categoryCssClass } from '../helpers';
 import { api } from "src/api";
 
-export const ignoreListRegEx = /(frontmatter|code|math|templater|blockid|hashtag|internal)/;
+export const ignoreListRegEx = /(frontmatter|code|math|templater|blockid|hashtag)/;
 
 export interface LTRange {
 	from: number;

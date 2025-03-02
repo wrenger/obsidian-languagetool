@@ -5,7 +5,6 @@ import { DEFAULT_SETTINGS, endpointFromUrl, LTSettings, LTSettingsTab } from './
 import { api } from './api';
 import { buildUnderlineExtension } from './cm6/underlineExtension';
 import { LTRange, addUnderline, clearAllUnderlines, clearUnderlinesInRange, underlineField } from './cm6/underlineField';
-import { syntaxTree } from "@codemirror/language";
 import { cmpIgnoreCase, setDifference, setIntersect, setUnion } from "./helpers";
 import markdown from "./markdown";
 
@@ -321,21 +320,10 @@ export default class LanguageToolPlugin extends Plugin {
 		const language = cache?.frontmatter?.lt_language;
 
 		const selection = editor.state.selection.main;
-		if (!range && !selection.empty) {
+		if (!range && !selection.empty)
 			range = { ...selection };
-		}
 
-		// let offset = 0;
-		// let text = '';
-		// if (range) {
-		// 	range = increaseSelection(editor, range);
-		// 	offset = range.from;
-		// 	text = editor.state.sliceDoc(range.from, range.to);
-		// } else {
-		// 	text = editor.state.sliceDoc(0);
-		// }
 		let text = editor.state.sliceDoc();
-
 		if (!text.trim())
 			return;
 
@@ -345,7 +333,7 @@ export default class LanguageToolPlugin extends Plugin {
 
 			let { offset, annotations } = await markdown.parseAndAnnotate(text, range);
 			// reduce request size
-			annotations.optimize();
+			offset += annotations.optimize();
 
 			console.info(`Checking ${annotations.length()} characters...`);
 			console.debug("Text", JSON.stringify(annotations, undefined, '  '));
@@ -377,12 +365,9 @@ export default class LanguageToolPlugin extends Plugin {
 				// Fixes a bug where the match is outside the document
 				if (match.to > editor.state.doc.length)
 					continue;
-
 				// Ignore typos that are in the spellcheck dictionary
-				if (match.categoryId === 'TYPOS' && spellcheckDictionary.includes(match.text)) {
+				if (match.categoryId === 'TYPOS' && spellcheckDictionary.includes(match.text))
 					continue;
-				}
-
 				effects.push(addUnderline.of(match));
 			}
 		}
@@ -475,34 +460,4 @@ Settings: ${JSON.stringify({ ...this.settings, username: 'REDACTED', apikey: 'RE
 		await this.saveSettings();
 		return false;
 	}
-}
-
-
-/**
- * Try to select a semantic block, so that the grammar checks are more accurate.
- */
-function increaseSelection(editor: EditorView, range: LTRange): LTRange {
-	// TODO: Find the actual block with a markdown parser like mdast-util-from-markdown
-
-	let tree = null;
-	if (range.from > 0) {
-		tree = syntaxTree(editor.state);
-		const node = tree.resolveInner(range.from, -1);
-		// Skip list indentation so that remark doesn't interpret this as code block
-		if (node.type.name.startsWith('list-')) {
-			range.from = node.from;
-		} else {
-			range.from = editor.state.doc.lineAt(range.from).from;
-		}
-	} else {
-		range.from = 0;
-	}
-
-	if (range.to < editor.state.doc.length) {
-		range.to = editor.state.doc.lineAt(range.to).to;
-	} else {
-		range.to = editor.state.doc.length;
-	}
-
-	return range;
 }
