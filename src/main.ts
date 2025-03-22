@@ -6,7 +6,7 @@ import { api } from './api';
 import { buildUnderlineExtension } from './cm6/underlineExtension';
 import { LTRange, addUnderline, clearAllUnderlines, clearUnderlinesInRange, underlineField } from './cm6/underlineField';
 import { cmpIgnoreCase, setDifference, setIntersect, setUnion } from "./helpers";
-import markdown from "./markdown";
+import markdown from "./markdown/parser";
 
 export const SUGGESTIONS = 5;
 
@@ -334,11 +334,15 @@ export default class LanguageToolPlugin extends Plugin {
 			let { offset, annotations } = await markdown.parseAndAnnotate(text, range);
 			// reduce request size
 			offset += annotations.optimize();
+			if (annotations.length() === 0)
+				return;
 
 			console.info(`Checking ${annotations.length()} characters...`);
 			console.debug("Text", JSON.stringify(annotations, undefined, '  '));
 
 			matches = await api.check(this.settings, offset, annotations, language);
+			// update range to the checked text
+			if (range) range = { from: offset, to: offset + annotations.length() };
 		} catch (e) {
 			console.error(e);
 			if (e instanceof Error) {
@@ -352,6 +356,7 @@ export default class LanguageToolPlugin extends Plugin {
 
 		const effects: StateEffect<LTRange | null>[] = [];
 
+		// remove previous underlines
 		if (range) {
 			effects.push(clearUnderlinesInRange.of(range));
 		} else {
@@ -385,15 +390,10 @@ export default class LanguageToolPlugin extends Plugin {
 Error: '${e.message}'
 Settings: ${JSON.stringify({ ...this.settings, username: 'REDACTED', apikey: 'REDACTED' })}
 `;
-		if (this.settings.username)
-			debugString = debugString.replaceAll(this.settings.username, "<<username>>");
-		if (this.settings.apikey)
-			debugString = debugString.replaceAll(this.settings.apikey, "<<username>>");
 
 		this.logs.push(debugString);
-		if (this.logs.length > 10) {
+		if (this.logs.length > 10)
 			this.logs.shift();
-		}
 	}
 
 	public async loadSettings(): Promise<void> {

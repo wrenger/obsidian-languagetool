@@ -1,15 +1,15 @@
 import type { RootContent, BlockContent, Text } from 'mdast';
 import type { Position } from 'unist';
-import { AnnotatedText } from './annotated.js';
+import { AnnotatedText } from '../annotated.js';
 
 import { fromMarkdown } from 'mdast-util-from-markdown'
 import { gfm } from 'micromark-extension-gfm';
 import { gfmFromMarkdown } from 'mdast-util-gfm';
 import { frontmatter } from 'micromark-extension-frontmatter';
 import { frontmatterFromMarkdown } from 'mdast-util-frontmatter';
-import { LTRange } from './cm6/underlineField.js';
-import { wikiLink } from './markdown/micromark-wikilink.js';
-import { wikiLinkFromMarkdown } from './markdown/mdast-wikilink.js';
+import { LTRange } from '../cm6/underlineField.js';
+import { wikiLink } from './micromark-wikilink.js';
+import { wikiLinkFromMarkdown } from './mdast-wikilink.js';
 
 export namespace markdown {
     export async function parseAndAnnotate(
