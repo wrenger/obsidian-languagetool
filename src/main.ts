@@ -70,9 +70,11 @@ export default class LanguageToolPlugin extends Plugin {
             editorCallback: (editor, view) => {
                 // @ts-expect-error, not typed
                 const editorView = editor.cm as EditorView;
-                this.runDetection(editorView).catch(e => {
-                    console.error(e);
-                });
+                this.runDetection(editorView)
+                    .catch(e => console.error(e))
+                    .then(suggestions => {
+                        if (!suggestions) new Notice("No suggestions found.");
+                    });
             },
         });
         this.addCommand({
@@ -296,7 +298,8 @@ export default class LanguageToolPlugin extends Plugin {
                     if (view && view.getMode() === "source") {
                         // @ts-expect-error, not typed
                         const editorView = view.editor.cm as EditorView;
-                        await this.runDetection(editorView);
+                        const suggestions = await this.runDetection(editorView);
+                        if (!suggestions) new Notice("No suggestions found.");
                     }
                 });
             })
@@ -333,7 +336,7 @@ export default class LanguageToolPlugin extends Plugin {
     /**
      * Check the current document, adding underlines.
      */
-    public async runDetection(editor: EditorView, range?: LTRange): Promise<void> {
+    public async runDetection(editor: EditorView, range?: LTRange): Promise<boolean> {
         const file = this.app.workspace.getActiveFile();
         const cache = file && this.app.metadataCache.getFileCache(file);
         const language = cache?.frontmatter?.lt_language;
@@ -342,7 +345,7 @@ export default class LanguageToolPlugin extends Plugin {
         if (!range && !selection.empty) range = { ...selection };
 
         const text = editor.state.sliceDoc();
-        if (!text.trim()) return;
+        if (!text.trim()) return false;
 
         let matches: api.LTMatch[];
         try {
@@ -351,7 +354,7 @@ export default class LanguageToolPlugin extends Plugin {
             let { offset, annotations } = await markdown.parseAndAnnotate(text, range);
             // reduce request size
             offset += annotations.optimize();
-            if (annotations.length() === 0) return;
+            if (annotations.length() === 0) return false;
 
             console.info(`Checking ${annotations.length()} characters...`);
             console.debug("Text", JSON.stringify(annotations, undefined, "  "));
@@ -365,7 +368,7 @@ export default class LanguageToolPlugin extends Plugin {
                 this.pushLogs(e);
                 new Notice(e.message, 30000);
             }
-            return;
+            return true;
         } finally {
             this.setStatusBarReady();
         }
@@ -394,6 +397,8 @@ export default class LanguageToolPlugin extends Plugin {
         if (effects.length) {
             editor.dispatch({ effects });
         }
+        console.info(`Found ${effects.length - 1} suggestions.`);
+        return effects.length > 1;
     }
 
     /**
