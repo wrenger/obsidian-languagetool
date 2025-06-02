@@ -1,56 +1,59 @@
 {
-    "name": "obsidian-languagetool",
-    "version": "1.0.14",
-    "description": "Unofficial integration of the LanguageTool spell and grammar checker.",
-    "main": "main.js",
-    "scripts": {
-        "dev": "node esbuild.config.mjs",
-        "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-        "version": "node version-bump.mjs && git add manifest.json versions.json"
+  "name": "obsidian-languagetool",
+  "version": "1.0.14",
+  "description": "Unofficial integration of the LanguageTool spell and grammar checker.",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "version": "node version-bump.mjs && git add manifest.json versions.json"
+  },
+  "keywords": [],
+  "author": "Lars Wrenger",
+  "contributors": [
+    {
+      "name": "Lars Wrenger",
+      "url": "https://github.com/wrenger"
     },
-    "keywords": [],
-    "author": "Lars Wrenger",
-    "contributors": [
-        {
-            "name": "Lars Wrenger",
-            "url": "https://github.com/wrenger"
-        },
-        {
-            "name": "Clemens Ertle",
-            "url": "https://github.com/Clemens-E"
-        },
-        {
-            "name": "Matthew Meyers",
-            "url": "https://github.com/mgmeyers"
-        }
-    ],
-    "repository": {
-        "url": "https://github.com/wrenger/obsidian-languagetool-plugin"
+    {
+      "name": "Clemens Ertle",
+      "url": "https://github.com/Clemens-E"
     },
-    "devDependencies": {
-        "@codemirror/language": "https://github.com/lishid/cm-language",
-        "@codemirror/state": "^6.4.1",
-        "@codemirror/view": "^6.34.1",
-        "@types/node": "^22.8.2",
-        "@typescript-eslint/eslint-plugin": "^8.12.1",
-        "@typescript-eslint/parser": "^8.12.1",
-        "@typescript-eslint/typescript-estree": "^8.12.1",
-        "builtin-modules": "5.0.0",
-        "electron": "^34.3.0",
-        "esbuild": "0.25.0",
-        "eslint": "^9.17.0",
-        "globals": "^16.0.0",
-        "obsidian": "^1.7.2",
-        "tslib": "^2.8.0",
-        "typescript": "~5.7.0",
-        "typescript-eslint": "^8.19.1"
-    },
-    "dependencies": {
-        "jsonpath-plus": "^10.1.0",
-        "mdast-util-from-markdown": "^2.0.2",
-        "mdast-util-frontmatter": "^2.0.1",
-        "mdast-util-gfm": "^3.1.0",
-        "micromark-extension-frontmatter": "^2.0.0",
-        "micromark-extension-gfm": "^3.0.0"
+    {
+      "name": "Matthew Meyers",
+      "url": "https://github.com/mgmeyers"
     }
+  ],
+  "repository": {
+    "url": "https://github.com/wrenger/obsidian-languagetool-plugin"
+  },
+  "devDependencies": {
+    "@codemirror/language": "https://github.com/lishid/cm-language",
+    "@codemirror/state": "^6.4.1",
+    "@codemirror/view": "^6.37.1",
+    "@types/node": "^22.15.29",
+    "@typescript-eslint/eslint-plugin": "^8.33.1",
+    "@typescript-eslint/parser": "^8.33.1",
+    "@typescript-eslint/typescript-estree": "^8.33.1",
+    "builtin-modules": "5.0.0",
+    "electron": "^36.3.2",
+    "esbuild": "0.25.5",
+    "eslint": "^9.28.0",
+    "globals": "^16.2.0",
+    "obsidian": "^1.7.2",
+    "tslib": "^2.8.0",
+    "typescript": "~5.8.3",
+    "typescript-eslint": "^8.33.1"
+  },
+  "dependencies": {
+    "jsonpath-plus": "^10.1.0",
+    "mdast-util-from-markdown": "^2.0.2",
+    "mdast-util-frontmatter": "^2.0.1",
+    "mdast-util-gfm": "^3.1.0",
+    "micromark-extension-frontmatter": "^2.0.0",
+    "micromark-extension-gfm": "^3.0.0"
+  },
+  "prettier": {
+    "arrowParens": "avoid"
+  }
 }

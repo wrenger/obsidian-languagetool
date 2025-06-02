@@ -1,14 +1,13 @@
+import { Code, Effects, Extension, State } from "micromark-util-types";
 
-import { Code, Effects, Extension, State } from 'micromark-util-types';
-
-declare module 'micromark-util-types' {
+declare module "micromark-util-types" {
     interface TokenTypeMap {
-        wikiLink: 'wikiLink',
-        wikiLinkMarker: 'wikiLinkMarker',
-        wikiLinkData: 'wikiLinkData',
-        wikiLinkTarget: 'wikiLinkTarget',
-        wikiLinkAliasMarker: 'wikiLinkAliasMarker',
-        wikiLinkAlias: 'wikiLinkAlias',
+        wikiLink: "wikiLink";
+        wikiLinkMarker: "wikiLinkMarker";
+        wikiLinkData: "wikiLinkData";
+        wikiLinkTarget: "wikiLinkTarget";
+        wikiLinkAliasMarker: "wikiLinkAliasMarker";
+        wikiLinkAlias: "wikiLinkAlias";
     }
 }
 
@@ -19,50 +18,49 @@ const codes = {
     eof: null,
     space: 32,
     leftSquareBracket: 91, // `[`
-}
+};
 
 function markdownLineEndingOrSpace(code: Code) {
-    return code != null && (code < codes.nul || code === codes.space)
+    return code != null && (code < codes.nul || code === codes.space);
 }
 
 function markdownLineEnding(code: Code) {
-    return code != null && (code < codes.horizontalTab)
+    return code != null && code < codes.horizontalTab;
 }
 
 interface Options {
-    aliasDivider?: string
+    aliasDivider?: string;
 }
 
 export function wikiLink(opts: Options = {}): Extension {
-    const aliasDivider = opts.aliasDivider || '|'
+    const aliasDivider = opts.aliasDivider || "|";
 
-    const aliasMarker = aliasDivider
-    const startMarker = '[['
-    const endMarker = ']]'
+    const aliasMarker = aliasDivider;
+    const startMarker = "[[";
+    const endMarker = "]]";
 
     function tokenize(effects: Effects, ok: State, nok: State) {
-        var data = false;
-        var alias = false;
+        let data = false;
+        let alias = false;
 
-        var aliasCursor = 0;
-        var startMarkerCursor = 0;
-        var endMarkerCursor = 0;
+        let aliasCursor = 0;
+        let startMarkerCursor = 0;
+        let endMarkerCursor = 0;
 
         return start;
 
         function start(code: Code) {
-            if (code !== startMarker.charCodeAt(startMarkerCursor))
-                return nok(code);
+            if (code !== startMarker.charCodeAt(startMarkerCursor)) return nok(code);
 
-            effects.enter('wikiLink');
-            effects.enter('wikiLinkMarker');
+            effects.enter("wikiLink");
+            effects.enter("wikiLinkMarker");
 
             return consumeStart(code);
         }
 
         function consumeStart(code: Code) {
             if (startMarkerCursor === startMarker.length) {
-                effects.exit('wikiLinkMarker');
+                effects.exit("wikiLinkMarker");
                 return consumeData(code);
             }
 
@@ -81,24 +79,24 @@ export function wikiLink(opts: Options = {}): Extension {
                 return nok(code);
             }
 
-            effects.enter('wikiLinkData');
-            effects.enter('wikiLinkTarget');
+            effects.enter("wikiLinkData");
+            effects.enter("wikiLinkTarget");
             return consumeTarget(code);
         }
 
         function consumeTarget(code: Code) {
             if (code === aliasMarker.charCodeAt(aliasCursor)) {
                 if (!data) return nok(code);
-                effects.exit('wikiLinkTarget');
-                effects.enter('wikiLinkAliasMarker');
+                effects.exit("wikiLinkTarget");
+                effects.enter("wikiLinkAliasMarker");
                 return consumeAliasMarker(code);
             }
 
             if (code === endMarker.charCodeAt(endMarkerCursor)) {
                 if (!data) return nok(code);
-                effects.exit('wikiLinkTarget');
-                effects.exit('wikiLinkData');
-                effects.enter('wikiLinkMarker');
+                effects.exit("wikiLinkTarget");
+                effects.exit("wikiLinkData");
+                effects.enter("wikiLinkMarker");
                 return consumeEnd(code);
             }
 
@@ -117,8 +115,8 @@ export function wikiLink(opts: Options = {}): Extension {
 
         function consumeAliasMarker(code: Code) {
             if (aliasCursor === aliasMarker.length) {
-                effects.exit('wikiLinkAliasMarker');
-                effects.enter('wikiLinkAlias');
+                effects.exit("wikiLinkAliasMarker");
+                effects.enter("wikiLinkAlias");
                 return consumeAlias(code);
             }
 
@@ -135,9 +133,9 @@ export function wikiLink(opts: Options = {}): Extension {
         function consumeAlias(code: Code) {
             if (code === endMarker.charCodeAt(endMarkerCursor)) {
                 if (!alias) return nok(code);
-                effects.exit('wikiLinkAlias');
-                effects.exit('wikiLinkData');
-                effects.enter('wikiLinkMarker');
+                effects.exit("wikiLinkAlias");
+                effects.exit("wikiLinkData");
+                effects.enter("wikiLinkMarker");
                 return consumeEnd(code);
             }
 
@@ -156,8 +154,8 @@ export function wikiLink(opts: Options = {}): Extension {
 
         function consumeEnd(code: Code) {
             if (endMarkerCursor === endMarker.length) {
-                effects.exit('wikiLinkMarker');
-                effects.exit('wikiLink');
+                effects.exit("wikiLinkMarker");
+                effects.exit("wikiLink");
                 return ok(code);
             }
 
@@ -174,9 +172,9 @@ export function wikiLink(opts: Options = {}): Extension {
     return {
         text: {
             [codes.leftSquareBracket]: {
-                name: 'wikilink',
-                tokenize: tokenize
-            }
-        }
+                name: "wikilink",
+                tokenize: tokenize,
+            },
+        },
     };
 }

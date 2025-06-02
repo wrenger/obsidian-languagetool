@@ -1,4 +1,4 @@
-export type Annotation = { text: string } | { markup: string, interpretAs?: string }
+export type Annotation = { text: string } | { markup: string; interpretAs?: string };
 
 /** Annotated text with optional markup for LanguageTool */
 export class AnnotatedText {
@@ -18,13 +18,12 @@ export class AnnotatedText {
 
     /** Merge compatible annotations to reduce the length, returning the start offset */
     optimize(): number {
-        let output: Annotation[] = [];
-        for (let a of this.annotations) {
-            if (("text" in a && a.text.length === 0) ||
-                ("markup" in a && a.markup.length === 0 && !a.interpretAs))
+        const output: Annotation[] = [];
+        for (const a of this.annotations) {
+            if (("text" in a && a.text.length === 0) || ("markup" in a && a.markup.length === 0 && !a.interpretAs))
                 continue;
 
-            let last = output.at(-1);
+            const last = output.at(-1);
             if (last === undefined) {
                 output.push(a);
             } else {
@@ -32,28 +31,26 @@ export class AnnotatedText {
                     last.text += a.text;
                 } else if ("markup" in last && "markup" in a) {
                     last.markup += a.markup;
-                    if (last.interpretAs && a.interpretAs)
-                        last.interpretAs += a.interpretAs;
-                    else if (a.interpretAs)
-                        last.interpretAs = a.interpretAs;
+                    if (last.interpretAs && a.interpretAs) last.interpretAs += a.interpretAs;
+                    else if (a.interpretAs) last.interpretAs = a.interpretAs;
                 } else {
                     output.push(a);
                 }
             }
         }
-        for (let a of output) {
+        for (const a of output) {
             if ("markup" in a && a.interpretAs) {
                 // replace more than two new lines with two new lines
                 a.interpretAs = a.interpretAs.replace(/\n{3,}/g, "\n\n");
             }
         }
         // remove markup from the end
-        for (let a = output.at(-1); a && "markup" in a; a = output.at(-1)){
+        for (let a = output.at(-1); a && "markup" in a; a = output.at(-1)) {
             output.pop();
         }
         // remove markup from the start
         let offset = 0;
-        for (let a = output.at(0); a && "markup" in a; a = output.at(0)){
+        for (let a = output.at(0); a && "markup" in a; a = output.at(0)) {
             offset += a.markup.length;
             output.shift();
         }
@@ -86,8 +83,7 @@ export class AnnotatedText {
                 text += annotation.interpretAs ?? "";
             }
 
-            if (text.length >= to)
-                return text.slice(from, to).trim();
+            if (text.length >= to) return text.slice(from, to).trim();
         }
         return null;
     }
