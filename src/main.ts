@@ -348,6 +348,7 @@ export default class LanguageToolPlugin extends Plugin {
         if (!text.trim()) return false;
 
         let matches: api.LTMatch[];
+        let longNotice: Notice | undefined = undefined;
         try {
             this.setStatusBarWorking();
 
@@ -355,6 +356,7 @@ export default class LanguageToolPlugin extends Plugin {
             // reduce request size
             offset += annotations.optimize();
             if (annotations.length() === 0) return false;
+            if (annotations.length() > 500) longNotice = new Notice("Checking spelling...", 30000);
 
             console.info(`Checking ${annotations.length()} characters...`);
             console.debug("Text", JSON.stringify(annotations, undefined, "  "));
@@ -371,6 +373,7 @@ export default class LanguageToolPlugin extends Plugin {
             return true;
         } finally {
             this.setStatusBarReady();
+            if (longNotice) longNotice.hide();
         }
 
         const effects: StateEffect<LTRange | null>[] = [];
