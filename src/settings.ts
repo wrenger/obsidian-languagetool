@@ -9,12 +9,15 @@ import {
     SliderComponent,
     TextComponent,
 } from "obsidian";
+
 import LanguageToolPlugin from "./main";
 import * as api from "./api";
 import { cmpIgnoreCase } from "./helpers";
 
 const autoCheckDelayMax = 5000;
 const autoCheckDelayStep = 250;
+
+export const SUGGESTIONS = 5;
 
 export class Endpoint {
     url: string;

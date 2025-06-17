@@ -3,7 +3,7 @@ import { StateField, StateEffect } from "@codemirror/state";
 import { syntaxTree, tokenClassNodeProp } from "@codemirror/language";
 import { Tree } from "@lezer/common";
 import { categoryCssClass } from "../helpers";
-import * as api from "src/api";
+import * as api from "api";
 
 export const ignoreListRegEx = /(frontmatter|code|math|templater|blockid|hashtag)/;
 

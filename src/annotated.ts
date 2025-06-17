@@ -9,11 +9,18 @@ export class AnnotatedText {
     }
 
     pushText(text: string) {
-        this.annotations.push({ text });
+        if (text.length > 0) this.annotations.push({ text });
     }
 
     pushMarkup(markup: string, interpretAs?: string) {
         this.annotations.push({ markup, interpretAs });
+    }
+
+    extend(other: AnnotatedText) {
+        for (const a of other.annotations) {
+            if ("text" in a) this.pushText(a.text);
+            else this.pushMarkup(a.markup, a.interpretAs);
+        }
     }
 
     /** Merge compatible annotations to reduce the length, returning the start offset */

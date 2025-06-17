@@ -2,9 +2,10 @@ import { EditorView, Tooltip, showTooltip } from "@codemirror/view";
 import { StateField, EditorState } from "@codemirror/state";
 import { categoryCssClass } from "../helpers";
 import { setIcon } from "obsidian";
-import { default as LanguageToolPlugin, SUGGESTIONS } from "src/main";
+import { default as LanguageToolPlugin } from "main";
 import { clearUnderlinesInRange, underlineField, clearMatchingUnderlines } from "./underlineField";
-import * as api from "src/api";
+import * as api from "api";
+import { SUGGESTIONS } from "settings";
 
 function constructTooltip(plugin: LanguageToolPlugin, view: EditorView, underline: api.LTMatch): HTMLDivElement {
     const buttons = underline.replacements.slice(0, SUGGESTIONS);

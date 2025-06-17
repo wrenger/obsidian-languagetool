@@ -4,7 +4,12 @@ import tseslint from "typescript-eslint";
 /** @type {import('eslint').Linter.Config[]} */
 export default [
     { files: ["/src/**/*.ts"] },
-    { languageOptions: { globals: globals.node } },
+    {
+        languageOptions: {
+            globals: globals.node,
+            ...globals.jest,
+        }
+    },
     ...tseslint.configs.recommended,
     {
         rules: {

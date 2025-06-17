@@ -1,5 +1,5 @@
 import { tooltips } from "@codemirror/view";
-import LanguageToolPlugin from "src/main";
+import LanguageToolPlugin from "main";
 import { buildAutoCheckHandler } from "./buildAutoCheckHandler";
 import { buildTooltipField } from "./tooltipField";
 import { underlineField } from "./underlineField";

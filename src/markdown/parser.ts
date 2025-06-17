@@ -1,14 +1,17 @@
 import type { RootContent, BlockContent, Text } from "mdast";
-import { AnnotatedText } from "../annotated.js";
 
 import { fromMarkdown } from "mdast-util-from-markdown";
 import { gfm } from "micromark-extension-gfm";
 import { gfmFromMarkdown } from "mdast-util-gfm";
 import { frontmatter } from "micromark-extension-frontmatter";
 import { frontmatterFromMarkdown } from "mdast-util-frontmatter";
-import { LTRange } from "../cm6/underlineField.js";
-import { wikiLink } from "./micromark-wikilink.js";
-import { wikiLinkFromMarkdown } from "./mdast-wikilink.js";
+
+import { AnnotatedText } from "../annotated";
+import { LTRange } from "../cm6/underlineField";
+import { wikiLink } from "./micromark-wikilink";
+import { wikiLinkFromMarkdown } from "./mdast-wikilink";
+
+const ESCAPE = /\\[!"#$%&'()*+,\-.\/:;<=>?@\[\\\]^_`{|}~]/g;
 
 export async function parseAndAnnotate(
     text: string,
@@ -20,7 +23,12 @@ export async function parseAndAnnotate(
     });
 
     const annotator = new AnnotationVisitor(text, range);
-    tree.children.forEach(child => annotator.visitRoot(child, 0));
+    try {
+        tree.children.forEach(child => annotator.visitRoot(child));
+    } catch (e) {
+        console.error("Error while parsing markdown:\n", JSON.stringify(tree, undefined, "  "));
+        throw e;
+    }
     return { offset: annotator.output_start ?? 0, annotations: annotator.output };
 }
 
@@ -39,42 +47,29 @@ class AnnotationVisitor {
         this.range = range;
     }
 
-    visitText(node: Text, indent: number) {
+    visitText(node: Text) {
         const startOffset = node?.position?.start.offset;
         const endOffset = node?.position?.end.offset;
         if (startOffset == null || endOffset == null) {
             throw Error("Markdown parsing: unknown position for text node");
         }
 
-        const textLen = node.value.length + (node.value.split("\n").length - 1) * indent;
-        const nodeLen = endOffset - startOffset;
-        if (textLen < nodeLen) {
-            // There are probably escape characters
-            // It is not really clear why mdast did remove the escape nodes, but here we are
+        const raw = this.raw.slice(startOffset, endOffset);
+        addLines(raw, node.value, this.output);
 
-            // Find escapes
-            const slice = this.raw.slice(startOffset, endOffset);
-            let offset = 0;
-            for (const match of slice.matchAll(/\\[[:punct:]]/g)) {
-                const start = match.index;
-                // Could span over multiple lines
-                addLines(slice.slice(offset, start), indent, this.output);
-                this.output.pushMarkup(" ", ""); // backslash character
-                this.output.pushText(slice.slice(start + 1, start + 2));
-                offset = start + 2;
-            }
-            addLines(slice.slice(offset), indent, this.output);
-        } else if (textLen > nodeLen) {
-            console.error("Invalid length", textLen, nodeLen, JSON.stringify(node, undefined, "  "));
-            throw Error("Markdown parsing: invalid text length");
-        } else {
-            // Default: no escapes
-            addLines(node.value, indent, this.output);
+        if (this.output.length() !== (endOffset - (this.output_start || 0))) {
+            console.error(
+                "Invalid output length",
+                this.output.length(),
+                endOffset,
+                JSON.stringify(node, undefined, "  "),
+            );
+            throw Error("Markdown parsing: invalid output length");
         }
         this.offset = endOffset;
     }
 
-    visitRoot(node: RootContent, indent: number) {
+    visitRoot(node: RootContent) {
         if (node.position == null) throw Error("Markdown parsing: unknown position");
 
         const startOffset = node?.position?.start.offset;
@@ -97,13 +92,13 @@ class AnnotationVisitor {
                 this.output = new AnnotatedText();
                 this.offset = startOffset;
                 this.output_start = this.offset;
-                console.log("Start from", this.output_start);
+                console.debug("Start from", this.output_start);
             }
 
             // Block containing end
             if (startOffset <= this.range.to && this.range.to <= endOffset) {
                 this.output_end = endOffset;
-                console.log("End at", this.output_end);
+                console.debug("End at", this.output_end);
             }
         }
 
@@ -115,7 +110,7 @@ class AnnotationVisitor {
 
         switch (node.type) {
             case "text":
-                this.visitText(node, indent);
+                this.visitText(node);
                 break;
             case "yaml":
             case "code":
@@ -130,11 +125,11 @@ class AnnotationVisitor {
             case "delete":
             case "footnoteDefinition":
             case "linkReference":
-                node.children.forEach(child => this.visitRoot(child, indent));
+                node.children.forEach(child => this.visitRoot(child));
                 break;
             case "list":
             case "heading":
-                node.children.forEach(child => this.visitRoot(child, indent));
+                node.children.forEach(child => this.visitRoot(child));
                 this.output.pushMarkup("", "\n\n");
                 break;
             case "inlineCode":
@@ -148,24 +143,20 @@ class AnnotationVisitor {
             case "blockquote":
             case "paragraph":
                 if (node.children.length > 0) {
-                    const column = node.children.at(0)?.position?.start?.column;
-                    const ind = column != null ? column - 1 : indent;
-                    node.children.forEach(child => this.visitRoot(child, ind));
+                    node.children.forEach(child => this.visitRoot(child));
                     this.output.pushMarkup("", "\n\n");
                 }
                 break;
             case "listItem":
                 if (node.children.length > 0) {
                     this.output.pushMarkup("", "• ");
-                    const column = node.children.at(0)?.position?.start?.column;
-                    const ind = column != null ? column - 1 : indent;
-                    node.children.forEach(child => this.visitRoot(child, ind));
+                    node.children.forEach(child => this.visitRoot(child));
                 }
                 break;
             case "link":
             case "wikiLink":
                 if (node.children) {
-                    node.children.forEach(child => this.visitRoot(child, indent));
+                    node.children.forEach(child => this.visitRoot(child));
                 } else {
                     this.output.pushMarkup(emptyMarkup(startOffset, endOffset), "DUMMY");
                     this.offset = endOffset;
@@ -173,14 +164,14 @@ class AnnotationVisitor {
                 break;
             case "table":
                 this.output.pushMarkup("", "\n");
-                node.children.forEach(child => this.visitRoot(child, indent));
+                node.children.forEach(child => this.visitRoot(child));
                 break;
             case "tableRow":
-                node.children.forEach(child => this.visitRoot(child, indent));
+                node.children.forEach(child => this.visitRoot(child));
                 this.output.pushMarkup("", "\n\n");
                 break;
             case "tableCell":
-                node.children.forEach(child => this.visitRoot(child, indent));
+                node.children.forEach(child => this.visitRoot(child));
                 this.output.pushMarkup("", "\n");
                 break;
             case "thematicBreak":
@@ -188,16 +179,63 @@ class AnnotationVisitor {
                 this.offset = endOffset;
                 break;
         }
+
+        // Padding
+        if (this.offset < endOffset) {
+            this.output.pushMarkup(" ".repeat(endOffset - this.offset));
+            this.offset = endOffset;
+        }
     }
 }
 
-function addLines(text: string, indent: number, output: AnnotatedText) {
-    const [first, ...reminder] = text.split("\n");
-    output.pushText(first);
-    for (const line of reminder) {
-        output.pushMarkup(" ".repeat(indent));
-        output.pushText("\n" + line);
+/// Adds text to the output, handling escape characters
+function addText(text: string, output: AnnotatedText) {
+    // There are probably escape characters
+    // It is not really clear why mdast did remove the escape nodes, but here we are
+
+    // Find escapes
+    let offset = 0;
+    for (const match of text.matchAll(ESCAPE)) {
+        const start = match.index;
+        // Could span over multiple lines
+        output.pushText(text.slice(offset, start));
+        output.pushMarkup(" ", ""); // backslash character
+        output.pushText(text.slice(start + 1, start + 2));
+        offset = start + 2;
     }
+    output.pushText(text.slice(offset));
+}
+
+function addLines(text: string, parsed: string, output: AnnotatedText) {
+    const [first, ...reminder] = text.replace(/\n$/, "").split("\n");
+    const [pfirst, ...premider] = parsed.replace(/\n$/, "").split("\n");
+
+    if (reminder.length !== premider.length) {
+        console.error("Invalid number of lines", reminder.length, premider.length, text, parsed);
+        throw Error("Markdown parsing: invalid number of lines");
+    }
+
+    addText(first, output);
+
+    for (let i = 0; i < reminder.length; i++) {
+        const line = reminder[i];
+        const pline = premider[i];
+
+        let indent = line.length - pline.length;
+        for (const m of line.matchAll(ESCAPE)) {
+            indent -= 1; // each escape character is one longer
+        }
+        if (indent < 0) {
+            console.error("Invalid indent", indent, line, pline);
+            throw Error("Markdown parsing: invalid indent");
+        }
+
+        output.pushText("\n");
+        output.pushMarkup(" ".repeat(indent));
+        addText(line.substring(indent), output);
+    }
+    if (text.endsWith("\n"))
+        output.pushText("\n");
 }
 
 function emptyMarkup(startOffset: number, endOffset: number): string {

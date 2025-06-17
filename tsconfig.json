@@ -1,17 +1,18 @@
 {
   "compilerOptions": {
-    "baseUrl": ".",
-    "inlineSourceMap": true,
+    "baseUrl": "src",
+    "sourceMap": true,
+    "inlineSourceMap": false,
     "inlineSources": true,
     "module": "ESNext",
-    "target": "es6",
-    "allowJs": true,
+    "target": "es2022",
+    "allowJs": false,
     "noImplicitAny": true,
     "moduleResolution": "node",
     "importHelpers": true,
     "strictNullChecks": true,
     "allowSyntheticDefaultImports": true,
-    "lib": ["dom", "es5", "scripthost", "es2018", "es2021"]
+    "lib": ["dom", "scripthost", "ES2022"]
   },
-  "include": ["**/*.ts"]
+  "include": ["**/*.ts", "jest.config.mts"]
 }

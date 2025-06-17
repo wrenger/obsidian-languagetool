@@ -1,8 +1,8 @@
 import { Command, Editor, MarkdownView, Menu, Notice, Plugin, setIcon } from "obsidian";
 import { Decoration, EditorView } from "@codemirror/view";
 import { ChangeSpec, StateEffect } from "@codemirror/state";
-import { DEFAULT_SETTINGS, endpointFromUrl, LTSettings, LTSettingsTab } from "./settings";
-import * as api from "src/api";
+import { DEFAULT_SETTINGS, endpointFromUrl, LTSettings, LTSettingsTab, SUGGESTIONS } from "./settings";
+import * as api from "api";
 import { buildUnderlineExtension } from "./cm6/underlineExtension";
 import {
     LTRange,
@@ -13,8 +13,6 @@ import {
 } from "./cm6/underlineField";
 import { cmpIgnoreCase, setDifference, setIntersect, setUnion } from "./helpers";
 import * as markdown from "./markdown/parser";
-
-export const SUGGESTIONS = 5;
 
 export default class LanguageToolPlugin extends Plugin {
     public settings: LTSettings;
