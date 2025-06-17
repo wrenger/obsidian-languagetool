@@ -2434,11 +2434,6 @@ concat-map@0.0.1:
   resolved "https://registry.yarnpkg.com/concat-map/-/concat-map-0.0.1.tgz#d8a96bd77fd68df7793a73036a3ba0d5405d477b"
   integrity sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==
 
-concat-merge@^1.0.2:
-  version "1.2.0"
-  resolved "https://registry.yarnpkg.com/concat-merge/-/concat-merge-1.2.0.tgz#72283507afc8f11d41274694ef616203f1d2778f"
-  integrity sha512-8vsfGlvZVUc2d5POU6x/eV645GVQhwgk9L0XnsmtejtDpM7pPGcl2norxeJb69pionKQHLgLx0CTuEsZGMZbaw==
-
 convert-source-map@^2.0.0:
   version "2.0.0"
   resolved "https://registry.yarnpkg.com/convert-source-map/-/convert-source-map-2.0.0.tgz#4b560f649fc4e918dd0ab75cf4961e8bc882d82a"
@@ -4716,13 +4711,6 @@ roarr@^2.15.3:
     json-stringify-safe "^5.0.1"
     semver-compare "^1.0.0"
     sprintf-js "^1.1.2"
-
-rollup-jest@^3.1.0:
-  version "3.1.0"
-  resolved "https://registry.yarnpkg.com/rollup-jest/-/rollup-jest-3.1.0.tgz#e5457088a1b1962e6045443491d0b913d6192b61"
-  integrity sha512-6jEupvSFyalbNRv/Gp24ptWlpy7KQnwPnLr2Q1EoH7ZP+R/DpyDVPwKBfkJRnYdeM467O9HZaj8ahUEyY1Tflw==
-  dependencies:
-    concat-merge "^1.0.2"
 
 rollup-plugin-typescript2@^0.36.0:
   version "0.36.0"
