@@ -4,13 +4,9 @@ import { syntaxTree, tokenClassNodeProp } from "@codemirror/language";
 import { Tree } from "@lezer/common";
 import { categoryCssClass } from "../helpers";
 import * as api from "api";
+import { LTRange } from "markdown/parser";
 
 export const ignoreListRegEx = /(frontmatter|code|math|templater|blockid|hashtag)/;
-
-export interface LTRange {
-    from: number;
-    to: number;
-}
 
 type UnderlineMatcher = (underline: api.LTMatch) => boolean;
 
@@ -32,7 +28,7 @@ function rangeOverlapping(first: LTRange, second: LTRange): boolean {
     );
 }
 
-export const underlineField = StateField.define<DecorationSet>({
+export const underlineDecoration = StateField.define<DecorationSet>({
     create() {
         return Decoration.none;
     },
@@ -61,7 +57,9 @@ export const underlineField = StateField.define<DecorationSet>({
             if (!tree) tree = syntaxTree(tr.state);
 
             // Don't display whitespace rules in tables
-            const lineNodeProp = tree.resolve(tr.newDoc.lineAt(underline.from).from, 1).type.prop(tokenClassNodeProp);
+            const lineNodeProp = tree
+                .resolve(tr.newDoc.lineAt(underline.from).from, 1)
+                .type.prop(tokenClassNodeProp);
             if (lineNodeProp?.includes("table")) {
                 if (underline.ruleId === "WHITESPACE_RULE") {
                     return false;

@@ -1,14 +1,18 @@
-import { EditorView, Tooltip, showTooltip } from "@codemirror/view";
-import { StateField, EditorState } from "@codemirror/state";
+import { EditorView, Tooltip, TooltipView, showTooltip } from "@codemirror/view";
+import { StateField, EditorState, Facet } from "@codemirror/state";
 import { categoryCssClass } from "../helpers";
-import { setIcon } from "obsidian";
+import { Menu, setIcon } from "obsidian";
 import { default as LanguageToolPlugin } from "main";
-import { clearUnderlinesInRange, underlineField, clearMatchingUnderlines } from "./underlineField";
+import { clearUnderlinesInRange, underlineDecoration, clearMatchingUnderlines } from "./underlines";
 import * as api from "api";
 import { SUGGESTIONS } from "settings";
 
-function constructTooltip(plugin: LanguageToolPlugin, view: EditorView, underline: api.LTMatch): HTMLDivElement {
-    const buttons = underline.replacements.slice(0, SUGGESTIONS);
+function createTooltip(
+    plugin: LanguageToolPlugin,
+    view: EditorView,
+    underline: api.LTMatch
+): HTMLElement {
+    const buttons = underline.replacements.slice(0, SUGGESTIONS / 2);
     const category = underline.categoryId;
     const ruleId = underline.ruleId;
 
@@ -80,7 +84,9 @@ function constructTooltip(plugin: LanguageToolPlugin, view: EditorView, underlin
 
                         // Remove other underlines with the same word
                         view.dispatch({
-                            effects: [clearMatchingUnderlines.of(match => match.text === underline.text)],
+                            effects: [
+                                clearMatchingUnderlines.of(match => match.text === underline.text),
+                            ],
                         });
                     };
                 });
@@ -98,13 +104,16 @@ function constructTooltip(plugin: LanguageToolPlugin, view: EditorView, underlin
                         setIcon(button.createSpan(), "circle-off");
                         button.createSpan({ text: "Disable rule" });
                         button.onclick = () => {
-                            if (plugin.settings.disabledRules) plugin.settings.disabledRules += "," + ruleId;
+                            if (plugin.settings.disabledRules)
+                                plugin.settings.disabledRules += "," + ruleId;
                             else plugin.settings.disabledRules = ruleId;
                             plugin.saveSettings();
 
                             // Remove other underlines of the same rule
                             view.dispatch({
-                                effects: [clearMatchingUnderlines.of(match => match.ruleId === ruleId)],
+                                effects: [
+                                    clearMatchingUnderlines.of(match => match.ruleId === ruleId),
+                                ],
                             });
                         };
                     });
@@ -114,52 +123,47 @@ function constructTooltip(plugin: LanguageToolPlugin, view: EditorView, underlin
     });
 }
 
-function getTooltip(tooltips: readonly Tooltip[], plugin: LanguageToolPlugin, state: EditorState): readonly Tooltip[] {
-    const underlines = state.field(underlineField);
+function getTooltip(
+    tooltips: readonly Tooltip[],
+    plugin: LanguageToolPlugin,
+    state: EditorState
+): readonly Tooltip[] {
+    const underlines = state.field(underlineDecoration);
+    if (underlines.size === 0 || state.selection.ranges.length > 1) return [];
 
-    if (underlines.size === 0 || state.selection.ranges.length > 1) {
-        return [];
-    }
+    let main = state.selection.main;
+    // If the selection is too large, we don't show a tooltip
+    if (main.to - main.from > 100) return [];
 
-    let primaryUnderline: api.LTMatch | null = null;
-
-    underlines.between(state.selection.main.from, state.selection.main.to, (from, to, value) => {
-        primaryUnderline = {
-            ...(value.spec.underline as api.LTMatch),
-            from,
-            to,
+    let newTooltip: Tooltip | null = null;
+    let cursor = underlines.iter(main.from);
+    if (cursor.value != null && cursor.from <= main.to) {
+        let match = cursor.value.spec.underline as api.LTMatch;
+        newTooltip = {
+            pos: cursor.from,
+            end: cursor.to,
+            above: true,
+            strictSide: false,
+            arrow: false,
+            create: view => ({
+                dom: createTooltip(plugin, view, match),
+            }),
         };
-    });
-
-    if (primaryUnderline != null) {
-        const { from, to } = primaryUnderline;
-
-        if (tooltips.length) {
-            const tooltip = tooltips[0];
-
-            if (tooltip.pos === from && tooltip.end === to) {
-                return tooltips;
-            }
-        }
-
-        return [
-            {
-                pos: from,
-                end: to,
-                above: true,
-                strictSide: false,
-                arrow: false,
-                create: view => ({
-                    dom: constructTooltip(plugin, view, primaryUnderline as api.LTMatch),
-                }),
-            },
-        ];
+    }
+    // No changes to the tooltips, return the old ones
+    if (
+        newTooltip &&
+        tooltips.length == 1 &&
+        tooltips[0].pos === newTooltip.pos &&
+        tooltips[0].end === newTooltip.end
+    ) {
+        return tooltips;
     }
 
-    return [];
+    return newTooltip ? [newTooltip] : [];
 }
 
-export function buildTooltipField(plugin: LanguageToolPlugin): StateField<readonly Tooltip[]> {
+export function buildTooltip(plugin: LanguageToolPlugin): StateField<readonly Tooltip[]> {
     return StateField.define<readonly Tooltip[]>({
         create: state => getTooltip([], plugin, state),
         update: (tooltips, tr) => getTooltip(tooltips, plugin, tr.state),

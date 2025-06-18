@@ -49,6 +49,16 @@
     }
 }
 
+.lt-menu-info {
+    max-width: 200px;
+}
+.lt-menu-message {
+    font-size: 0.8em;
+}
+.lt-menu-title + .lt-menu-message {
+    margin-top: 5pt;
+}
+
 .lt-predictions-container.cm-tooltip,
 .lt-predictions-container {
     position: absolute;

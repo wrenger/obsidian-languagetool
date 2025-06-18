@@ -2,7 +2,7 @@ import { Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import LanguageToolPlugin from "main";
 
-export function buildAutoCheckHandler(plugin: LanguageToolPlugin): Extension {
+export function autoCheckListener(plugin: LanguageToolPlugin): Extension {
     let debounceTimer = -1;
     let minRange = Infinity;
     let maxRange = -Infinity;

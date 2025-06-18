@@ -1,18 +1,25 @@
-import { Command, Editor, MarkdownView, Menu, Notice, Plugin, setIcon } from "obsidian";
+import { Command, Editor, MarkdownView, Menu, Notice, Plugin, setIcon, setTooltip } from "obsidian";
 import { Decoration, EditorView } from "@codemirror/view";
 import { ChangeSpec, StateEffect } from "@codemirror/state";
-import { DEFAULT_SETTINGS, endpointFromUrl, LTSettings, LTSettingsTab, SUGGESTIONS } from "./settings";
-import * as api from "api";
-import { buildUnderlineExtension } from "./cm6/underlineExtension";
 import {
-    LTRange,
+    DEFAULT_SETTINGS,
+    endpointFromUrl,
+    LTSettings,
+    LTSettingsTab,
+    SUGGESTIONS,
+} from "./settings";
+import * as api from "api";
+import { underlineExtension } from "./editor/extension";
+import {
     addUnderline,
     clearAllUnderlines,
+    clearMatchingUnderlines,
     clearUnderlinesInRange,
-    underlineField,
-} from "./cm6/underlineField";
+    underlineDecoration,
+} from "./editor/underlines";
 import { cmpIgnoreCase, setDifference, setIntersect, setUnion } from "./helpers";
 import * as markdown from "./markdown/parser";
+import { LTRange } from "./markdown/parser";
 
 export default class LanguageToolPlugin extends Plugin {
     public settings: LTSettings;
@@ -38,7 +45,7 @@ export default class LanguageToolPlugin extends Plugin {
         });
 
         // Editor functionality
-        this.registerEditorExtension(buildUnderlineExtension(this));
+        this.registerEditorExtension(underlineExtension(this));
 
         // Commands
         this.registerCommands();
@@ -65,6 +72,7 @@ export default class LanguageToolPlugin extends Plugin {
         this.addCommand({
             id: "check",
             name: "Check text",
+            icon: "spell-check",
             editorCallback: (editor, view) => {
                 // @ts-expect-error, not typed
                 const editorView = editor.cm as EditorView;
@@ -78,6 +86,7 @@ export default class LanguageToolPlugin extends Plugin {
         this.addCommand({
             id: "toggle-auto-check",
             name: "Toggle automatic checking",
+            icon: "uppercase-lowercase-a",
             callback: async () => {
                 this.settings.shouldAutoCheck = !this.settings.shouldAutoCheck;
                 await this.saveSettings();
@@ -86,6 +95,7 @@ export default class LanguageToolPlugin extends Plugin {
         this.addCommand({
             id: "clear",
             name: "Clear suggestions",
+            icon: "cross",
             editorCallback: editor => {
                 // @ts-expect-error, not typed
                 const editorView = editor.cm as EditorView;
@@ -97,37 +107,43 @@ export default class LanguageToolPlugin extends Plugin {
         this.addCommand({
             id: "accept-all",
             name: "Accept all suggestions",
+            icon: "circle-check-big",
             editorCallback: editor => {
                 // @ts-expect-error, not typed
                 const editorView = editor.cm as EditorView;
                 const changes: ChangeSpec[] = [];
                 const effects: StateEffect<LTRange>[] = [];
-                editorView.state.field(underlineField).between(0, Infinity, (from, to, value) => {
-                    if (value.spec?.underline?.replacements?.length) {
-                        changes.push({
-                            from,
-                            to,
-                            insert: value.spec.underline.replacements[0],
-                        });
-                        effects.push(clearUnderlinesInRange.of({ from, to }));
-                    }
-                });
+                editorView.state
+                    .field(underlineDecoration)
+                    .between(0, Infinity, (from, to, value) => {
+                        if (value.spec?.underline?.replacements?.length) {
+                            changes.push({
+                                from,
+                                to,
+                                insert: value.spec.underline.replacements[0],
+                            });
+                            effects.push(clearUnderlinesInRange.of({ from, to }));
+                        }
+                    });
                 editorView.dispatch({ changes, effects });
             },
         });
         this.addCommand({
             id: "next",
             name: "Jump to next suggestion",
+            icon: "chevron-right",
             editorCheckCallback: (checking, editor) => {
                 // @ts-expect-error, not typed
                 const editorView = editor.cm as EditorView;
                 const cursorOffset = editor.posToOffset(editor.getCursor());
                 let firstMatch = null as { from: number; to: number } | null;
-                editorView.state.field(underlineField).between(cursorOffset + 1, Infinity, (from, to) => {
-                    if (!firstMatch || firstMatch.from > from) {
-                        firstMatch = { from, to };
-                    }
-                });
+                editorView.state
+                    .field(underlineDecoration)
+                    .between(cursorOffset + 1, Infinity, (from, to) => {
+                        if (!firstMatch || firstMatch.from > from) {
+                            firstMatch = { from, to };
+                        }
+                    });
                 if (checking) {
                     return firstMatch != null;
                 }
@@ -144,6 +160,7 @@ export default class LanguageToolPlugin extends Plugin {
         this.addCommand({
             id: "synonyms",
             name: "Show synonyms",
+            icon: "square-stack",
             editorCheckCallback: (checking, editor) => this.showSynonyms(editor, checking),
         });
     }
@@ -152,6 +169,7 @@ export default class LanguageToolPlugin extends Plugin {
         return {
             id: `accept-${n}`,
             name: `Accept suggestion ${n}`,
+            icon: "circle-check",
             editorCheckCallback(checking, editor) {
                 // @ts-expect-error, not typed
                 const editorView = editor.cm as EditorView;
@@ -164,13 +182,16 @@ export default class LanguageToolPlugin extends Plugin {
                 }[] = [];
 
                 // Get underline-matches at cursor
-                editorView.state.field(underlineField).between(cursorOffset, cursorOffset, (from, to, value) => {
-                    matches.push({ from, to, value });
-                });
+                editorView.state
+                    .field(underlineDecoration)
+                    .between(cursorOffset, cursorOffset, (from, to, value) => {
+                        matches.push({ from, to, value });
+                    });
 
                 // Check that there is exactly one match that has a replacement in the slot that is called.
                 const preconditions =
-                    matches.length === 1 && matches[0].value.spec?.underline?.replacements?.length >= n;
+                    matches.length === 1 &&
+                    matches[0].value.spec?.underline?.replacements?.length >= n;
 
                 if (checking) return preconditions;
                 if (!preconditions) return;
@@ -195,15 +216,130 @@ export default class LanguageToolPlugin extends Plugin {
     private registerMenuItems() {
         this.registerEvent(
             this.app.workspace.on("editor-menu", (menu, editor, view) => {
-                if (!this.showSynonyms(editor, true)) return;
+                console.debug(menu);
 
-                menu.addItem(item => {
-                    item.setTitle("Synonyms");
-                    item.setIcon("square-stack");
-                    item.onClick(() => this.showSynonyms(editor));
-                });
-            }),
+                // @ts-expect-error, not typed
+                const editorView = editor.cm as EditorView;
+                this.populateSuggestionMenu(menu, editorView);
+
+                if (this.showSynonyms(editor, true)) {
+                    menu.addItem(item => {
+                        item.setTitle("Synonyms");
+                        item.setIcon("square-stack");
+                        item.setSection("spellcheck");
+                        item.onClick(() => this.showSynonyms(editor));
+                    });
+                }
+            })
         );
+    }
+
+    private populateSuggestionMenu(menu: Menu, editor: EditorView): boolean {
+        const underlines = editor.state.field(underlineDecoration);
+        const selection = editor.state.selection.main;
+
+        let populated = false;
+        const cursor = underlines.iter(selection.from);
+        while (cursor.value != null && cursor.from <= selection.to) {
+            populated = true;
+            const match = cursor.value.spec.underline as api.LTMatch;
+            menu.addItem(item => {
+                item.setTitle(`Suggestions (${match.text})`);
+                item.setIcon("spell-check");
+                item.setSection("spellcheck");
+                // @ts-expect-error, not typed
+                const submenu: Menu = item.setSubmenu();
+                this.populateSuggestionSubmenu(submenu, match, editor);
+            });
+            cursor.next();
+        }
+        return populated;
+    }
+
+    public populateSuggestionSubmenu(submenu: Menu, match: api.LTMatch, editor: EditorView): void {
+        if (match.message || match.title) {
+            submenu.addItem(item => {
+                let fragment = new DocumentFragment();
+                fragment.appendChild(
+                    createDiv({ cls: "lt-menu-info" }, header => {
+                        if (match.title)
+                            header.createDiv({ text: match.title, cls: "lt-menu-title" });
+                        if (match.message)
+                            header.createDiv({
+                                text: match.message,
+                                cls: "lt-menu-message",
+                            });
+                    })
+                );
+                item.setIsLabel(true);
+                item.setTitle(fragment);
+                // item.setIcon("info");
+            });
+            submenu.addSeparator();
+        }
+
+        for (const replacement of match.replacements.slice(0, SUGGESTIONS)) {
+            submenu.addItem(item => {
+                item.setTitle(replacement ? JSON.stringify(replacement) : "(delete)");
+                item.onClick(() => {
+                    editor.dispatch({
+                        changes: {
+                            from: match.from,
+                            to: match.to,
+                            insert: replacement,
+                        },
+                        effects: [clearUnderlinesInRange.of(match)],
+                    });
+                });
+            });
+        }
+
+        submenu.addSeparator();
+
+        if (match.categoryId === "TYPOS") {
+            submenu.addItem(subItem => {
+                subItem.setTitle("Add to dictionary");
+                subItem.setIcon("check");
+                subItem.onClick(async () => {
+                    this.settings.dictionary.push(match.text);
+                    await this.syncDictionary();
+                    editor.dispatch({
+                        effects: [clearMatchingUnderlines.of(m => m.text === match.text)],
+                    });
+                });
+            });
+        } else {
+            submenu.addItem(subItem => {
+                subItem.setTitle("Ignore suggestion");
+                subItem.setIcon("cross");
+                subItem.onClick(() => {
+                    editor.dispatch({
+                        effects: [clearUnderlinesInRange.of(match)],
+                    });
+                });
+            });
+
+            if (match.ruleId && match.ruleId !== "SYNONYMS") {
+                submenu.addItem(subItem => {
+                    subItem.setTitle("Disable rule");
+                    subItem.setIcon("circle-off");
+                    subItem.onClick(() => {
+                        if (this.settings.disabledRules)
+                            this.settings.disabledRules += "," + match.ruleId;
+                        else this.settings.disabledRules = match.ruleId;
+                        this.saveSettings();
+
+                        editor.dispatch({
+                            effects: [clearMatchingUnderlines.of(m => m.ruleId === match.ruleId)],
+                        });
+                    });
+
+                    // @ts-expect-error, not typed
+                    const dom = subItem.dom;
+                    setTooltip(dom, `${match.categoryId} > ${match.ruleId}`);
+                });
+            }
+        }
     }
 
     private showSynonyms(editor: Editor, checking: boolean = false): boolean {
@@ -218,7 +354,7 @@ export default class LanguageToolPlugin extends Plugin {
 
         const word = editorView.state.sliceDoc(
             editorView.state.selection.main.from,
-            editorView.state.selection.main.to,
+            editorView.state.selection.main.to
         );
         if (word.match(/[\s\.]/)) return false;
 
@@ -252,7 +388,7 @@ export default class LanguageToolPlugin extends Plugin {
                             replacements,
                         }),
                     ],
-                }),
+                })
             )
             .catch(e => {
                 console.error(e);
@@ -290,7 +426,7 @@ export default class LanguageToolPlugin extends Plugin {
         new Menu()
             .addItem(item => {
                 item.setTitle("Check text");
-                item.setIcon("checkbox-glyph");
+                item.setIcon("spell-check");
                 item.onClick(async () => {
                     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
                     if (view && view.getMode() === "source") {
@@ -303,7 +439,9 @@ export default class LanguageToolPlugin extends Plugin {
             })
             .addItem(item => {
                 item.setTitle(
-                    this.settings.shouldAutoCheck ? "Disable automatic checking" : "Enable automatic checking",
+                    this.settings.shouldAutoCheck
+                        ? "Disable automatic checking"
+                        : "Enable automatic checking"
                 );
                 item.setIcon("uppercase-lowercase-a");
                 item.onClick(async () => {
@@ -313,7 +451,7 @@ export default class LanguageToolPlugin extends Plugin {
             })
             .addItem(item => {
                 item.setTitle("Clear suggestions");
-                item.setIcon("reset");
+                item.setIcon("cross");
                 item.onClick(() => {
                     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
                     if (!view) return;
@@ -390,7 +528,8 @@ export default class LanguageToolPlugin extends Plugin {
                 // Fixes a bug where the match is outside the document
                 if (match.to > editor.state.doc.length) continue;
                 // Ignore typos that are in the spellcheck dictionary
-                if (match.categoryId === "TYPOS" && spellcheckDictionary.includes(match.text)) continue;
+                if (match.categoryId === "TYPOS" && spellcheckDictionary.includes(match.text))
+                    continue;
                 effects.push(addUnderline.of(match));
             }
         }
@@ -432,7 +571,10 @@ Settings: ${JSON.stringify({ ...this.settings, username: "REDACTED", apikey: "RE
      * returning whether the local dictionary has been changed.
      */
     public async syncDictionary(): Promise<boolean> {
-        if (!this.settings.syncDictionary || endpointFromUrl(this.settings.serverUrl) !== "premium") {
+        if (
+            !this.settings.syncDictionary ||
+            endpointFromUrl(this.settings.serverUrl) !== "premium"
+        ) {
             await this.saveSettings();
             return false;
         }

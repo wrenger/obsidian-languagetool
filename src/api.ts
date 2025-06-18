@@ -24,7 +24,7 @@ export async function check(
     settings: LTSettings,
     offset: number,
     annotated: AnnotatedText,
-    language?: string,
+    language?: string
 ): Promise<LTMatch[]> {
     const data = annotated.stringify();
 
@@ -44,7 +44,8 @@ export async function check(
     if (settings.enabledRules) params.enabledRules = settings.enabledRules;
     if (settings.disabledRules) params.disabledRules = settings.disabledRules;
 
-    if (lang == "auto") params.preferredVariants = Object.values(settings.languageVariety).join(",");
+    if (lang == "auto")
+        params.preferredVariants = Object.values(settings.languageVariety).join(",");
 
     const endpointType = endpointFromUrl(settings.serverUrl);
     if (endpointType !== "standard" && settings.apikey && settings.username) {
@@ -230,7 +231,9 @@ async function requestUrlChecked(request: RequestUrlParam): Promise<RequestUrlRe
     try {
         response = await requestUrl({ ...request, throw: false });
     } catch (e) {
-        throw new Error(`Request to LanguageTool failed: Please check your connection and server URL.\n${e}`);
+        throw new Error(
+            `Request to LanguageTool failed: Please check your connection and server URL.\n${e}`
+        );
     }
     if (response.status === 504 || response.status === 503)
         throw new Error(`Request to LanguageTool timed out. Please try again later.`);
@@ -247,7 +250,10 @@ function jsonPath<T>(path: string, json: string | number | boolean | object | ob
     if (res == null) throw new Error(`Error parsing response.`);
     return res as T;
 }
-function jsonPathA<T>(path: string, json: string | number | boolean | object | object[] | null): T[] {
+function jsonPathA<T>(
+    path: string,
+    json: string | number | boolean | object | object[] | null
+): T[] {
     const res = JSONPath({ path: path, json: json, wrap: true, eval: false });
     if (res == null || !(res instanceof Array)) throw new Error(`Error parsing response.`);
     return res as T[];

@@ -17,7 +17,7 @@ import { cmpIgnoreCase } from "./helpers";
 const autoCheckDelayMax = 5000;
 const autoCheckDelayStep = 250;
 
-export const SUGGESTIONS = 5;
+export const SUGGESTIONS = 8;
 
 export class Endpoint {
     url: string;
@@ -121,7 +121,7 @@ export class LTSettingsTab extends PluginSettingTab {
         this.plugin.settings.autoCheckDelay = Math.clamp(
             this.plugin.settings.autoCheckDelay,
             minAutoCheckDelay,
-            autoCheckDelayMax,
+            autoCheckDelayMax
         );
         slider.setLimits(minAutoCheckDelay, autoCheckDelayMax, autoCheckDelayStep);
     }
@@ -132,7 +132,10 @@ export class LTSettingsTab extends PluginSettingTab {
         }
     }
 
-    private async configureLanguageVariants(dropdown: DropdownComponent, code: string): Promise<void> {
+    private async configureLanguageVariants(
+        dropdown: DropdownComponent,
+        code: string
+    ): Promise<void> {
         const languageVariety = this.plugin.settings.languageVariety;
         const variants = languageVariants(this.languages, code);
         languageVariety[code] = languageVariety[code] ?? Object.keys(variants)[0];
@@ -211,9 +214,11 @@ export class LTSettingsTab extends PluginSettingTab {
                             endpoint = value as EndpointType;
                             settings.serverUrl = endpoints[endpoint].url;
 
-                            if (input) input.setValue(settings.serverUrl).setDisabled(value !== "custom");
+                            if (input)
+                                input.setValue(settings.serverUrl).setDisabled(value !== "custom");
 
-                            if (autoCheckDelaySlider) this.configureCheckDelay(autoCheckDelaySlider, endpoint);
+                            if (autoCheckDelaySlider)
+                                this.configureCheckDelay(autoCheckDelaySlider, endpoint);
 
                             await this.notifyEndpointChange(settings);
 
@@ -226,7 +231,9 @@ export class LTSettingsTab extends PluginSettingTab {
                         .setValue(settings.serverUrl)
                         .setDisabled(endpoint !== "custom")
                         .onChange(async value => {
-                            settings.serverUrl = value.replace(/\/v2\/check\/$/, "").replace(/\/$/, "");
+                            settings.serverUrl = value
+                                .replace(/\/v2\/check\/$/, "")
+                                .replace(/\/$/, "");
 
                             endpoint = endpointFromUrl(settings.serverUrl);
                             if (endpoint !== "custom") {
@@ -251,7 +258,7 @@ export class LTSettingsTab extends PluginSettingTab {
                     .onChange(async value => {
                         settings.username = value.replace(/\s+/g, "");
                         await this.plugin.saveSettings();
-                    }),
+                    })
             );
         new Setting(containerEl)
             .setName("API key")
@@ -262,16 +269,18 @@ export class LTSettingsTab extends PluginSettingTab {
                         href: "https://github.com/wrenger/obsidian-languagetool#premium-accounts",
                         attr: { target: "_blank" },
                     });
-                }),
+                })
             )
             .addText(text =>
                 text.setValue(settings.apikey || "").onChange(async value => {
                     settings.apikey = value.replace(/\s+/g, "");
                     if (settings.apikey && endpoint !== "premium") {
-                        new Notice("You have entered an API Key but you are not using the Premium Endpoint");
+                        new Notice(
+                            "You have entered an API Key but you are not using the Premium Endpoint"
+                        );
                     }
                     await this.plugin.saveSettings();
-                }),
+                })
             );
         new Setting(containerEl)
             .setName("Auto check text")
@@ -317,7 +326,9 @@ export class LTSettingsTab extends PluginSettingTab {
             }
         }
 
-        const synonyms = new Setting(containerEl).setName("Find synonyms").setDesc(createFragment(synonymsDesc));
+        const synonyms = new Setting(containerEl)
+            .setName("Find synonyms")
+            .setDesc(createFragment(synonymsDesc));
         synonyms.addDropdown(component => {
             component.addOption("none", "---");
             for (const lang of Object.keys(api.SYNONYMS)) {
@@ -335,7 +346,7 @@ export class LTSettingsTab extends PluginSettingTab {
         new Setting(containerEl)
             .setName("Mother tongue")
             .setDesc(
-                "Set mother tongue if you want to be warned about false friends when writing in other languages. This setting will also be used for automatic language detection.",
+                "Set mother tongue if you want to be warned about false friends when writing in other languages. This setting will also be used for automatic language detection."
             )
             .addDropdown(component => {
                 this.languageListeners.push(async languages => {
@@ -349,8 +360,10 @@ export class LTSettingsTab extends PluginSettingTab {
                         .addOptions(
                             Object.fromEntries(
                                 // only languages that are not dialects
-                                languages.filter(v => v.longCode == v.code).map(v => [v.longCode, v.name]),
-                            ),
+                                languages
+                                    .filter(v => v.longCode == v.code)
+                                    .map(v => [v.longCode, v.name])
+                            )
                         )
                         .setValue(settings.motherTongue ?? "none")
                         .onChange(async value => {
@@ -363,7 +376,7 @@ export class LTSettingsTab extends PluginSettingTab {
         new Setting(containerEl)
             .setName("Static language")
             .setDesc(
-                "Set a static language that will always be used (LanguageTool tries to auto detect the language, this is usually not necessary)",
+                "Set a static language that will always be used (LanguageTool tries to auto detect the language, this is usually not necessary)"
             )
             .addDropdown(component => {
                 this.languageListeners.push(async languages => {
@@ -375,7 +388,7 @@ export class LTSettingsTab extends PluginSettingTab {
                         v =>
                             v.longCode.length > 2 ||
                             v.longCode !== v.code ||
-                            languages.filter(l => l.code == v.code).length <= 1,
+                            languages.filter(l => l.code == v.code).length <= 1
                     );
 
                     // Clear options
@@ -406,9 +419,11 @@ export class LTSettingsTab extends PluginSettingTab {
             ca: "Catalan",
         };
         for (const [id, lang] of Object.entries(langVariants)) {
-            new Setting(containerEl).setName(`Interpret ${lang} as`).addDropdown(async component => {
-                this.configureLanguageVariants(component, id);
-            });
+            new Setting(containerEl)
+                .setName(`Interpret ${lang} as`)
+                .addDropdown(async component => {
+                    this.configureLanguageVariants(component, id);
+                });
         }
 
         // ---------------------------------------------------------------------
@@ -453,7 +468,7 @@ export class LTSettingsTab extends PluginSettingTab {
             .setDesc(
                 createFragment(frag => {
                     frag.appendText(
-                        "The picky mode enables a lot of extra categories and rules. Additionally, you can enable or disable specific rules down below.",
+                        "The picky mode enables a lot of extra categories and rules. Additionally, you can enable or disable specific rules down below."
                     );
                     frag.createEl("br");
                     frag.createEl("a", {
@@ -461,13 +476,13 @@ export class LTSettingsTab extends PluginSettingTab {
                         href: "https://community.languagetool.org/rule/list",
                         attr: { target: "_blank" },
                     });
-                }),
+                })
             );
 
         new Setting(containerEl)
             .setName("Picky mode")
             .setDesc(
-                "Provides more style and tonality suggestions, detects long or complex sentences, recognizes colloquialism and redundancies, proactively suggests synonyms for commonly overused words",
+                "Provides more style and tonality suggestions, detects long or complex sentences, recognizes colloquialism and redundancies, proactively suggests synonyms for commonly overused words"
             )
             .addToggle(component => {
                 component.setValue(settings.pickyMode).onChange(async value => {
@@ -486,7 +501,7 @@ export class LTSettingsTab extends PluginSettingTab {
                     .onChange(async value => {
                         settings.enabledCategories = value.replace(/\s+/g, "");
                         await this.plugin.saveSettings();
-                    }),
+                    })
             );
 
         new Setting(containerEl)
@@ -499,7 +514,7 @@ export class LTSettingsTab extends PluginSettingTab {
                     .onChange(async value => {
                         settings.disabledCategories = value.replace(/\s+/g, "");
                         await this.plugin.saveSettings();
-                    }),
+                    })
             );
 
         new Setting(containerEl)
@@ -512,7 +527,7 @@ export class LTSettingsTab extends PluginSettingTab {
                     .onChange(async value => {
                         settings.enabledRules = value.replace(/\s+/g, "");
                         await this.plugin.saveSettings();
-                    }),
+                    })
             );
 
         new Setting(containerEl)
@@ -525,7 +540,7 @@ export class LTSettingsTab extends PluginSettingTab {
                     .onChange(async value => {
                         settings.disabledRules = value.replace(/\s+/g, "");
                         await this.plugin.saveSettings();
-                    }),
+                    })
             );
 
         await this.notifyEndpointChange(settings);
@@ -551,7 +566,9 @@ export class DictionaryModal extends Modal {
             container.replaceChildren(
                 ...this.words.map(word =>
                     container.createDiv({ cls: "multi-select-pill" }, pill => {
-                        pill.createDiv({ cls: "multi-select-pill-content" }, pill => pill.createSpan({ text: word }));
+                        pill.createDiv({ cls: "multi-select-pill-content" }, pill =>
+                            pill.createSpan({ text: word })
+                        );
                         pill.createDiv({ cls: "multi-select-pill-remove-button" }, remove => {
                             remove.appendChild(getIcon("x")!);
                             remove.onClickEvent(() => {
@@ -559,8 +576,8 @@ export class DictionaryModal extends Modal {
                                 createButtons(container);
                             });
                         });
-                    }),
-                ),
+                    })
+                )
             );
         };
 
@@ -591,7 +608,9 @@ export class DictionaryModal extends Modal {
         new Setting(contentEl)
             .setName("Add")
             .addText(component => {
-                addComponent = component.setValue(newWord).onChange(value => (newWord = value.trim()));
+                addComponent = component
+                    .setValue(newWord)
+                    .onChange(value => (newWord = value.trim()));
                 component.inputEl.addEventListener("keypress", event => {
                     if (event.key === "Enter") addWord();
                 });

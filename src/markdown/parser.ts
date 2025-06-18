@@ -7,19 +7,27 @@ import { frontmatter } from "micromark-extension-frontmatter";
 import { frontmatterFromMarkdown } from "mdast-util-frontmatter";
 
 import { AnnotatedText } from "../annotated";
-import { LTRange } from "../cm6/underlineField";
 import { wikiLink } from "./micromark-wikilink";
 import { wikiLinkFromMarkdown } from "./mdast-wikilink";
 
 const ESCAPE = /\\[!"#$%&'()*+,\-.\/:;<=>?@\[\\\]^_`{|}~]/g;
 
+export interface LTRange {
+    from: number;
+    to: number;
+}
+
 export async function parseAndAnnotate(
     text: string,
-    range?: LTRange,
+    range?: LTRange
 ): Promise<{ offset: number; annotations: AnnotatedText }> {
     const tree = fromMarkdown(text, {
         extensions: [gfm(), frontmatter(["yaml"]), wikiLink({ aliasDivider: "|" })],
-        mdastExtensions: [gfmFromMarkdown(), frontmatterFromMarkdown(["yaml"]), wikiLinkFromMarkdown()],
+        mdastExtensions: [
+            gfmFromMarkdown(),
+            frontmatterFromMarkdown(["yaml"]),
+            wikiLinkFromMarkdown(),
+        ],
     });
 
     const annotator = new AnnotationVisitor(text, range);
@@ -57,12 +65,12 @@ class AnnotationVisitor {
         const raw = this.raw.slice(startOffset, endOffset);
         addLines(raw, node.value, this.output);
 
-        if (this.output.length() !== (endOffset - (this.output_start || 0))) {
+        if (this.output.length() !== endOffset - (this.output_start || 0)) {
             console.error(
                 "Invalid output length",
                 this.output.length(),
                 endOffset,
-                JSON.stringify(node, undefined, "  "),
+                JSON.stringify(node, undefined, "  ")
             );
             throw Error("Markdown parsing: invalid output length");
         }
@@ -234,8 +242,7 @@ function addLines(text: string, parsed: string, output: AnnotatedText) {
         output.pushMarkup(" ".repeat(indent));
         addText(line.substring(indent), output);
     }
-    if (text.endsWith("\n"))
-        output.pushText("\n");
+    if (text.endsWith("\n")) output.pushText("\n");
 }
 
 function emptyMarkup(startOffset: number, endOffset: number): string {
@@ -243,5 +250,14 @@ function emptyMarkup(startOffset: number, endOffset: number): string {
 }
 
 function isBlock(node: RootContent): node is BlockContent {
-    return ["blockquote", "code", "heading", "html", "list", "paragraph", "table", "thematicBreak"].contains(node.type);
+    return [
+        "blockquote",
+        "code",
+        "heading",
+        "html",
+        "list",
+        "paragraph",
+        "table",
+        "thematicBreak",
+    ].contains(node.type);
 }

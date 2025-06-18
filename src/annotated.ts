@@ -27,7 +27,10 @@ export class AnnotatedText {
     optimize(): number {
         const output: Annotation[] = [];
         for (const a of this.annotations) {
-            if (("text" in a && a.text.length === 0) || ("markup" in a && a.markup.length === 0 && !a.interpretAs))
+            if (
+                ("text" in a && a.text.length === 0) ||
+                ("markup" in a && a.markup.length === 0 && !a.interpretAs)
+            )
                 continue;
 
             const last = output.at(-1);
@@ -84,10 +87,13 @@ export class AnnotatedText {
             if ("text" in annotation) {
                 text += annotation.text;
             } else {
-                // markup is ignored and replaced
-                from = Math.max(text.length, from - annotation.markup.length);
-                to = Math.max(from, to - annotation.markup.length) + (annotation.interpretAs?.length ?? 0);
+                if (text.length < from) {
+                    from -= annotation.markup.length;
+                    from += annotation.interpretAs?.length || 0;
+                }
                 text += annotation.interpretAs ?? "";
+                to -= annotation.markup.length;
+                to += annotation.interpretAs?.length || 0;
             }
 
             if (text.length >= to) return text.slice(from, to).trim();
