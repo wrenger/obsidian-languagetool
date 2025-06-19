@@ -1,4 +1,14 @@
-import { Command, Editor, MarkdownView, Menu, Notice, Plugin, setIcon, setTooltip } from "obsidian";
+import {
+    ButtonComponent,
+    Command,
+    Editor,
+    MarkdownView,
+    Menu,
+    Notice,
+    Plugin,
+    setIcon,
+    setTooltip,
+} from "obsidian";
 import { Decoration, EditorView } from "@codemirror/view";
 import { ChangeSpec, StateEffect } from "@codemirror/state";
 import {
@@ -23,7 +33,7 @@ import { LTRange } from "./markdown/parser";
 
 export default class LanguageToolPlugin extends Plugin {
     public settings: LTSettings;
-    private statusBarText: HTMLElement;
+    private statusBarItem: HTMLElement;
 
     private isLoading = false;
 
@@ -38,11 +48,10 @@ export default class LanguageToolPlugin extends Plugin {
         this.addSettingTab(this.settingTab);
 
         // Status bar
-        this.app.workspace.onLayoutReady(() => {
-            this.statusBarText = this.addStatusBarItem();
-            this.setStatusBarReady();
-            this.registerDomEvent(this.statusBarText, "click", () => this.handleStatusBarClick());
-        });
+        this.statusBarItem = this.addStatusBarItem();
+        this.statusBarItem.addClass("status-bar-item-icon", "lt-status-bar-btn");
+        this.statusBarItem.onclick = () => this.handleStatusBarClick();
+        this.setStatusBarReady();
 
         // Editor functionality
         this.registerEditorExtension(underlineExtension(this));
@@ -244,7 +253,7 @@ export default class LanguageToolPlugin extends Plugin {
             populated = true;
             const match = cursor.value.spec.underline as api.LTMatch;
             menu.addItem(item => {
-                item.setTitle(`Suggestions (${match.text})`);
+                item.setTitle(`LanguageTool (${match.text})`);
                 item.setIcon("spell-check");
                 item.setSection("spellcheck");
                 // @ts-expect-error, not typed
@@ -259,21 +268,17 @@ export default class LanguageToolPlugin extends Plugin {
     public populateSuggestionSubmenu(submenu: Menu, match: api.LTMatch, editor: EditorView): void {
         if (match.message || match.title) {
             submenu.addItem(item => {
-                let fragment = new DocumentFragment();
-                fragment.appendChild(
+                let title = new DocumentFragment();
+                title.appendChild(
                     createDiv({ cls: "lt-menu-info" }, header => {
                         if (match.title)
                             header.createDiv({ text: match.title, cls: "lt-menu-title" });
                         if (match.message)
-                            header.createDiv({
-                                text: match.message,
-                                cls: "lt-menu-message",
-                            });
+                            header.createDiv({ text: match.message, cls: "lt-menu-message" });
                     })
                 );
                 item.setIsLabel(true);
-                item.setTitle(fragment);
-                // item.setIcon("info");
+                item.setTitle(title);
             });
             submenu.addSeparator();
         }
@@ -299,7 +304,7 @@ export default class LanguageToolPlugin extends Plugin {
         if (match.categoryId === "TYPOS") {
             submenu.addItem(subItem => {
                 subItem.setTitle("Add to dictionary");
-                subItem.setIcon("check");
+                subItem.setIcon("plus-with-circle");
                 subItem.onClick(async () => {
                     this.settings.dictionary.push(match.text);
                     await this.syncDictionary();
@@ -313,9 +318,7 @@ export default class LanguageToolPlugin extends Plugin {
                 subItem.setTitle("Ignore suggestion");
                 subItem.setIcon("cross");
                 subItem.onClick(() => {
-                    editor.dispatch({
-                        effects: [clearUnderlinesInRange.of(match)],
-                    });
+                    editor.dispatch({ effects: [clearUnderlinesInRange.of(match)] });
                 });
             });
 
@@ -400,28 +403,19 @@ export default class LanguageToolPlugin extends Plugin {
 
     public setStatusBarReady() {
         this.isLoading = false;
-        this.statusBarText.empty();
-        this.statusBarText.createSpan({ cls: "lt-status-bar-btn" }, span => {
-            span.createSpan({
-                cls: "lt-status-bar-check-icon",
-                text: "Aa",
-            });
-        });
+        setIcon(this.statusBarItem, "spell-check");
     }
 
     public setStatusBarWorking() {
         if (this.isLoading) return;
 
         this.isLoading = true;
-        this.statusBarText.empty();
-        this.statusBarText.createSpan({ cls: ["lt-status-bar-btn", "lt-loading"] }, span => {
-            setIcon(span, "sync-small");
-        });
+        setIcon(this.statusBarItem, "sync-small");
     }
 
     private handleStatusBarClick() {
-        const statusBarRect = this.statusBarText.parentElement?.getBoundingClientRect();
-        const statusBarIconRect = this.statusBarText.getBoundingClientRect();
+        const statusBarRect = this.statusBarItem.getBoundingClientRect();
+        const statusBarIconRect = this.statusBarItem.getBoundingClientRect();
 
         new Menu()
             .addItem(item => {

@@ -9,16 +9,14 @@ import { Platform } from "obsidian";
 export function underlineExtension(plugin: LanguageToolPlugin): Extension {
     let extensions = [
         tooltips({
-            position: "absolute",
+            parent: document.body,
             tooltipSpace: view => view.dom.getBoundingClientRect(),
         }),
         underlineDecoration,
         autoCheckListener(plugin),
     ];
 
-    // TODO: Check if we can open the context menu on mobile!
-    if (Platform.isMobile)
-        extensions.push(buildTooltip(plugin));
+    if (Platform.isMobile) extensions.push(buildTooltip(plugin));
 
     return extensions;
 }

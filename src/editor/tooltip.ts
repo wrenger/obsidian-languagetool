@@ -1,7 +1,7 @@
-import { EditorView, Tooltip, TooltipView, showTooltip } from "@codemirror/view";
-import { StateField, EditorState, Facet } from "@codemirror/state";
+import { EditorView, Tooltip, showTooltip } from "@codemirror/view";
+import { StateField, EditorState } from "@codemirror/state";
 import { categoryCssClass } from "../helpers";
-import { Menu, setIcon } from "obsidian";
+import { ButtonComponent, setIcon } from "obsidian";
 import { default as LanguageToolPlugin } from "main";
 import { clearUnderlinesInRange, underlineDecoration, clearMatchingUnderlines } from "./underlines";
 import * as api from "api";
@@ -10,43 +10,35 @@ import { SUGGESTIONS } from "settings";
 function createTooltip(
     plugin: LanguageToolPlugin,
     view: EditorView,
-    underline: api.LTMatch
+    match: api.LTMatch
 ): HTMLElement {
-    const buttons = underline.replacements.slice(0, SUGGESTIONS / 2);
-    const category = underline.categoryId;
-    const ruleId = underline.ruleId;
+    const replacements = match.replacements.slice(0, SUGGESTIONS / 2);
+    const category = match.categoryId;
+    const ruleId = match.ruleId;
 
-    return createDiv({ cls: ["lt-predictions-container", categoryCssClass(category)] }, root => {
-        if (underline.title) {
-            root.createSpan({ cls: "lt-title" }, span => {
-                span.createSpan({ text: underline.title });
-            });
-        }
-
-        if (underline.message) {
-            root.createSpan({ cls: "lt-message", text: underline.message });
-        }
+    return createDiv({ cls: ["lt-tooltip", categoryCssClass(category)] }, root => {
+        if (match.title) root.createSpan({ cls: "lt-title", text: match.title });
+        if (match.message) root.createSpan({ cls: "lt-message", text: match.message });
 
         root.createDiv({ cls: "lt-bottom" }, bottom => {
-            if (buttons.length > 0) {
-                bottom.createDiv({ cls: "lt-buttoncontainer" }, container => {
-                    for (const btnText of buttons) {
-                        container.createEl("button", { text: btnText || "(delete)" }, button => {
-                            button.onclick = () =>
-                                view.dispatch({
-                                    changes: [
-                                        {
-                                            from: underline.from,
-                                            to: underline.to,
-                                            insert: btnText,
-                                        },
-                                    ],
-                                    effects: [clearUnderlinesInRange.of(underline)],
-                                });
+            bottom.createDiv({ cls: "lt-buttoncontainer" }, container => {
+                for (const btnText of replacements) {
+                    const button = new ButtonComponent(container);
+                    button.setButtonText(btnText || "(delete)");
+                    button.onClick(() => {
+                        view.dispatch({
+                            changes: [
+                                {
+                                    from: match.from,
+                                    to: match.to,
+                                    insert: btnText,
+                                },
+                            ],
+                            effects: [clearUnderlinesInRange.of(match)],
                         });
-                    }
-                });
-            }
+                    });
+                }
+            });
             bottom.createDiv({ cls: "lt-info-container" }, container => {
                 container.createEl("button", { cls: "lt-info-button clickable-icon" }, button => {
                     setIcon(button, "info");
@@ -55,17 +47,10 @@ function createTooltip(
                         if (popup) popup.toggleAttribute("hidden");
                     };
                 });
-
                 container.createDiv({ cls: "lt-info-box", attr: { hidden: true } }, popup => {
                     // \u00A0 is a non-breaking space
-                    popup.createDiv({
-                        cls: "lt-info",
-                        text: `Category:\u00A0${category}`,
-                    });
-                    popup.createDiv({
-                        cls: "lt-info",
-                        text: `Rule:\u00A0${ruleId}`,
-                    });
+                    popup.createDiv({ cls: "lt-info", text: `Category:\u00A0${category}` });
+                    popup.createDiv({ cls: "lt-info", text: `Rule:\u00A0${ruleId}` });
                 });
             });
         });
@@ -74,18 +59,15 @@ function createTooltip(
             if (category === "TYPOS") {
                 container.createEl("button", { cls: "lt-ignore-btn" }, button => {
                     setIcon(button.createSpan(), "plus-with-circle");
-                    button.createSpan({
-                        text: "Add to personal dictionary",
-                    });
+                    button.createSpan({ text: "Add to dictionary" });
                     button.onclick = async () => {
                         // Add to global dictionary
-                        plugin.settings.dictionary.push(underline.text);
+                        plugin.settings.dictionary.push(match.text);
                         await plugin.syncDictionary();
-
                         // Remove other underlines with the same word
                         view.dispatch({
                             effects: [
-                                clearMatchingUnderlines.of(match => match.text === underline.text),
+                                clearMatchingUnderlines.of(match => match.text === match.text),
                             ],
                         });
                     };
@@ -93,11 +75,9 @@ function createTooltip(
             } else {
                 container.createEl("button", { cls: "lt-ignore-btn" }, button => {
                     setIcon(button.createSpan(), "cross");
-                    button.createSpan({ text: "Ignore suggestion" });
+                    button.createSpan({ text: "Ignore" });
                     button.onclick = () =>
-                        view.dispatch({
-                            effects: [clearUnderlinesInRange.of(underline)],
-                        });
+                        view.dispatch({ effects: [clearUnderlinesInRange.of(match)] });
                 });
                 if (category !== "SYNONYMS") {
                     container.createEl("button", { cls: "lt-ignore-btn" }, button => {
