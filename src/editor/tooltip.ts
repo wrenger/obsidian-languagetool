@@ -1,5 +1,5 @@
-import { EditorView, Tooltip, showTooltip } from "@codemirror/view";
-import { StateField, EditorState } from "@codemirror/state";
+import { EditorView, Tooltip, hoverTooltip } from "@codemirror/view";
+import { Extension } from "@codemirror/state";
 import { categoryCssClass } from "../helpers";
 import { ButtonComponent, setIcon } from "obsidian";
 import { default as LanguageToolPlugin } from "main";
@@ -27,31 +27,15 @@ function createTooltip(
                     button.setButtonText(btnText || "(delete)");
                     button.onClick(() => {
                         view.dispatch({
-                            changes: [
-                                {
-                                    from: match.from,
-                                    to: match.to,
-                                    insert: btnText,
-                                },
-                            ],
+                            changes: [{
+                                from: match.from,
+                                to: match.to,
+                                insert: btnText,
+                            }],
                             effects: [clearUnderlinesInRange.of(match)],
                         });
                     });
                 }
-            });
-            bottom.createDiv({ cls: "lt-info-container" }, container => {
-                container.createEl("button", { cls: "lt-info-button clickable-icon" }, button => {
-                    setIcon(button, "info");
-                    button.onclick = () => {
-                        const popup = document.getElementsByClassName("lt-info-box").item(0);
-                        if (popup) popup.toggleAttribute("hidden");
-                    };
-                });
-                container.createDiv({ cls: "lt-info-box", attr: { hidden: true } }, popup => {
-                    // \u00A0 is a non-breaking space
-                    popup.createDiv({ cls: "lt-info", text: `Category:\u00A0${category}` });
-                    popup.createDiv({ cls: "lt-info", text: `Rule:\u00A0${ruleId}` });
-                });
             });
         });
 
@@ -73,14 +57,14 @@ function createTooltip(
                     };
                 });
             } else {
-                container.createEl("button", { cls: "lt-ignore-btn" }, button => {
+                container.createDiv({ cls: "lt-ignore-btn" }, button => {
                     setIcon(button.createSpan(), "cross");
                     button.createSpan({ text: "Ignore" });
                     button.onclick = () =>
                         view.dispatch({ effects: [clearUnderlinesInRange.of(match)] });
                 });
                 if (category !== "SYNONYMS") {
-                    container.createEl("button", { cls: "lt-ignore-btn" }, button => {
+                    container.createDiv({ cls: "lt-ignore-btn" }, button => {
                         setIcon(button.createSpan(), "circle-off");
                         button.createSpan({ text: "Disable rule" });
                         button.onclick = () => {
@@ -99,54 +83,49 @@ function createTooltip(
                     });
                 }
             }
+            container.createDiv({ cls: "lt-info-container" }, container => {
+                container.createDiv({ cls: "lt-info-button clickable-icon" }, button => {
+                    setIcon(button, "info");
+                    button.onclick = () => {
+                        const popup = document.getElementsByClassName("lt-info-box").item(0);
+                        if (popup) popup.toggleAttribute("hidden");
+                    };
+                });
+            });
+        });
+        root.createDiv({ cls: "lt-info-box", attr: { hidden: true } }, popup => {
+            // \u00A0 is a non-breaking space
+            popup.createDiv({ cls: "lt-info", text: `Category:\u00A0${category}` });
+            popup.createDiv({ cls: "lt-info", text: `Rule:\u00A0${ruleId}` });
         });
     });
 }
 
-function getTooltip(
-    tooltips: readonly Tooltip[],
-    plugin: LanguageToolPlugin,
-    state: EditorState
-): readonly Tooltip[] {
+function lintTooltip(plugin: LanguageToolPlugin, view: EditorView, pos: number, side: -1 | 1): Tooltip | null {
+    const state = view.state;
     const underlines = state.field(underlineDecoration);
-    if (underlines.size === 0 || state.selection.ranges.length > 1) return [];
+    if (underlines.size === 0 || state.selection.ranges.length > 1) return null;
 
-    let main = state.selection.main;
-    // If the selection is too large, we don't show a tooltip
-    if (main.to - main.from > 100) return [];
-
-    let newTooltip: Tooltip | null = null;
-    let cursor = underlines.iter(main.from);
-    if (cursor.value != null && cursor.from <= main.to) {
+    let cursor = underlines.iter(pos);
+    if (cursor.value != null && cursor.from <= pos && cursor.to >= pos) {
         let match = cursor.value.spec.underline as api.LTMatch;
-        newTooltip = {
+        return {
             pos: cursor.from,
             end: cursor.to,
             above: true,
             strictSide: false,
             arrow: false,
+            clip: false,
             create: view => ({
                 dom: createTooltip(plugin, view, match),
             }),
         };
     }
-    // No changes to the tooltips, return the old ones
-    if (
-        newTooltip &&
-        tooltips.length == 1 &&
-        tooltips[0].pos === newTooltip.pos &&
-        tooltips[0].end === newTooltip.end
-    ) {
-        return tooltips;
-    }
-
-    return newTooltip ? [newTooltip] : [];
+    return null;
 }
 
-export function buildTooltip(plugin: LanguageToolPlugin): StateField<readonly Tooltip[]> {
-    return StateField.define<readonly Tooltip[]>({
-        create: state => getTooltip([], plugin, state),
-        update: (tooltips, tr) => getTooltip(tooltips, plugin, tr.state),
-        provide: f => showTooltip.computeN([f], state => state.field(f)),
+export function buildHoverTooltip(plugin: LanguageToolPlugin): Extension {
+    return hoverTooltip(lintTooltip.bind(null, plugin), {
+        hideOnChange: true,
     });
 }

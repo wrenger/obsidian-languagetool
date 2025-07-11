@@ -1,5 +1,4 @@
 import {
-    ButtonComponent,
     Command,
     Editor,
     MarkdownView,
