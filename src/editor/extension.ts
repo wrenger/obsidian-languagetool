@@ -7,10 +7,6 @@ import { buildHoverTooltip } from "./tooltip";
 
 export function underlineExtension(plugin: LanguageToolPlugin): Extension {
     return [
-        tooltips({
-            parent: document.body,
-            tooltipSpace: view => view.dom.getBoundingClientRect(),
-        }),
         underlineDecoration,
         autoCheckListener(plugin),
         buildHoverTooltip(plugin),
