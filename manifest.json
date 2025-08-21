@@ -1,8 +1,8 @@
 {
   "id": "languagetool",
   "name": "LanguageTool",
-  "version": "1.2.0",
-  "minAppVersion": "1.7.2",
+  "version": "1.3.0",
+  "minAppVersion": "1.8.7",
   "description": "Unofficial integration of the LanguageTool spell and grammar checker.",
   "author": "Lars Wrenger, Clemens Ertle",
   "authorUrl": "https://github.com/wrenger",
