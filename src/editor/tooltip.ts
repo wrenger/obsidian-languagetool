@@ -1,7 +1,7 @@
 import { EditorView, Tooltip, hoverTooltip } from "@codemirror/view";
 import { Extension } from "@codemirror/state";
 import { categoryCssClass } from "../helpers";
-import { ButtonComponent, requireApiVersion, setIcon } from "obsidian";
+import { ButtonComponent, setIcon } from "obsidian";
 import { default as LanguageToolPlugin } from "main";
 import { clearUnderlinesInRange, underlineDecoration, clearMatchingUnderlines } from "./underlines";
 import * as api from "api";
@@ -39,7 +39,7 @@ function createTooltip(
             });
         });
 
-        root.createDiv({ cls: "lt-ignorecontainer" }, container => {
+        root.createDiv({ cls: "lt-ignore-container" }, container => {
             if (category === "TYPOS") {
                 container.createEl("button", { cls: "lt-ignore-btn" }, button => {
                     setIcon(button.createSpan(), "plus-with-circle");
@@ -129,3 +129,94 @@ export function buildHoverTooltip(plugin: LanguageToolPlugin): Extension {
         hideOnChange: true,
     });
 }
+
+export const baseTheme = EditorView.baseTheme({
+    ".cm-tooltip.cm-tooltip-hover": {
+        padding: "var(--size-2-3)",
+        border: "1px solid var(--background-modifier-border-hover)",
+        backgroundColor: "var(--background-secondary)",
+        borderRadius: "var(--radius-m)",
+        boxShadow: "var(--shadow-s)",
+        zIndex: "var(--layer-menu)",
+        userSelect: "none",
+        overflow: "hidden",
+        "& > .lt-tooltip": {
+            fontFamily: "var(--default-font)",
+            fontSize: "var(--font-ui-small)",
+            width: "300px",
+            lineHeight: 1.5,
+            "& > .lt-title": {
+                display: "block",
+                fontWeight: 600,
+                marginBottom: "6px",
+                padding: "0 12px",
+                textDecoration: "underline 2px var(--lt-highlight)",
+                "-webkit-text-decoration": "underline 2px var(--lt-highlight)",
+            },
+            "& > .lt-message": {
+                display: "block",
+                padding: "0 12px",
+            },
+            "& > .lt-bottom": {
+                minHeight: "10px",
+                padding: "0 12px",
+                position: "relative",
+                "& > .lt-buttoncontainer": {
+                    "&:not(:empty)": {
+                        paddingTop: "10px",
+                    },
+                    "& > button": {
+                        marginRight: "4px",
+                        marginBottom: "4px",
+                        padding: "4px 6px",
+                    }
+                }
+            },
+            "& > .lt-ignore-container": {
+                display: "flex",
+                "& > .lt-ignore-btn": {
+                    fontSize: "var(--font-ui-small)",
+                    padding: "4px",
+                    display: "flex",
+                    flex: 1,
+                    width: "100%",
+                    textAlign: "left",
+                    alignItems: "center",
+                    lineHeight: 1,
+                    color: "var(--text-muted)",
+                    "& > span": {
+                        display: "flex",
+                        "&:last-child": {
+                            marginLeft: "5px",
+                        }
+                    },
+                    "&:hover": {
+                        color: "var(--text-normal)",
+                    }
+                },
+                "& > .lt-info-container": {
+                    display: "flex",
+                    flex: 0,
+                    "& > .lt-info-button": {
+                        color: "var(--text-faint)",
+                        height: "100%",
+                    }
+                }
+            },
+            "& > .lt-info-box": {
+                padding: "5px 0px 0px 0px",
+                overflowX: "scroll",
+                color: "var(--text-muted)",
+            }
+        },
+    },
+    ".lt-underline": {
+        cursor: "pointer",
+        transition: "background-color 100ms ease-out",
+        textDecoration: "wavy underline var(--lt-highlight)",
+        "-webkit-text-decoration": "wavy underline var(--lt-highlight)",
+        "&:hover": {
+            backgroundColor: "color-mix(in srgb, var(--lt-highlight), transparent 80%)",
+        },
+    },
+});
