@@ -98,45 +98,6 @@ function createTooltip(
             popup.createDiv({ cls: "lt-info", text: `Category:\u00A0${category}` });
             popup.createDiv({ cls: "lt-info", text: `Rule:\u00A0${ruleId}` });
         });
-
-        // Hacky workaround to prevent tooltips from vanishing on interaction
-        if (requireApiVersion('1.9.0')) {
-            let observer = new MutationObserver((mutationList) => {
-                for (const mutation of mutationList) {
-                    if (!(mutation.target instanceof HTMLElement)) continue;
-
-                    if (mutation.type === "attributes" && mutation.attributeName === "class"
-                        && mutation.target.classList.contains("cm-tooltip-section")) {
-                        console.info("Tooltip section class added");
-
-                        // Observe parent style changes
-                        const parent = root.parentElement;
-                        if (!parent) continue;
-                        let previousStyle: string | null = null;
-                        const parentObserver = new MutationObserver((parentMutations) => {
-                            for (const parentMutation of parentMutations) {
-                                if (!(parentMutation.target instanceof HTMLElement)) continue;
-
-                                if (parentMutation.type === "attributes"
-                                    && parentMutation.attributeName === "style") {
-                                    console.info(`Parent '${parentMutation.oldValue}' -> '${parent.style.cssText}'`);
-                                    if (parent.style.cssText.includes("-10000px")) {
-                                        if (previousStyle) {
-                                            console.info("Reset style change!!!");
-                                            parentMutation.target.setAttribute("style", previousStyle);
-                                        }
-                                    } else {
-                                        previousStyle = parentMutation.target.style.cssText;
-                                    }
-                                }
-                            }
-                        });
-                        parentObserver.observe(parent, { attributes: true });
-                    }
-                }
-            });
-            observer.observe(root, { attributes: true });
-        }
     });
 }
 
