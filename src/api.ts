@@ -24,11 +24,10 @@ export async function check(
     settings: LTSettings,
     offset: number,
     annotated: AnnotatedText,
-    language?: string
 ): Promise<LTMatch[]> {
     const data = annotated.stringify();
 
-    const lang = language ?? settings.staticLanguage ?? "auto";
+    const lang = settings.staticLanguage ?? "auto";
     const params: { [key: string]: string } = {
         data,
         language: lang,

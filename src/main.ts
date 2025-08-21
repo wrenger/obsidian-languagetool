@@ -60,6 +60,20 @@ export default class LanguageToolPlugin extends Plugin {
 
         this.registerMenuItems();
 
+        // Configure frontmatter suggestions
+        try {
+            // WARNING: Internal API
+            let typeManager = (this.app as any).metadataTypeManager;
+            typeManager.setType("lt-language", "text");
+            typeManager.setType("lt-picky", "checkbox");
+            typeManager.setType("lt-autoCheck", "checkbox");
+            typeManager.setType("lt-dictionary", "multitext");
+            typeManager.setType("lt-disabledRules", "multitext");
+            typeManager.setType("lt-disabledCategories", "multitext");
+        } catch {
+            console.error("Failed to set metadata types");
+        }
+
         // Spellcheck Dictionary
         const dictionary: Set<string> = new Set(this.settings.dictionary.map(w => w.trim()));
         dictionary.delete("");
@@ -463,12 +477,40 @@ export default class LanguageToolPlugin extends Plugin {
     }
 
     /**
+     * Get the settings for the current file, where values might be reconfigured in the frontmatter.
+     */
+    public getActiveFileSettings(): LTSettings {
+        const file = this.app.workspace.getActiveFile();
+        const cache = file && this.app.metadataCache.getFileCache(file);
+
+        if (cache?.frontmatter != null) {
+            const language = cache.frontmatter["lt-language"] ?? cache.frontmatter["lt_language"];
+            const picky = cache.frontmatter["lt-picky"];
+            const autoCheck = cache.frontmatter["lt-autoCheck"];
+            const dictionary = cache.frontmatter["lt-dictionary"];
+            const disabledRules = cache.frontmatter["lt-disabledRules"];
+            const disabledCategories = cache.frontmatter["lt-disabledCategories"];
+
+            // Beware: shallow clone
+            let settings = { ...this.settings };
+            if (typeof language === "string") settings.staticLanguage = language;
+            if (typeof autoCheck === "boolean") settings.shouldAutoCheck = autoCheck;
+            if (typeof picky === "boolean") settings.pickyMode = picky;
+            if (Array.isArray(dictionary)) settings.dictionary = dictionary;
+            if (Array.isArray(disabledRules) && disabledRules.length)
+                settings.disabledRules += "," + disabledRules.join(",");
+            if (Array.isArray(disabledCategories) && disabledCategories.length)
+                settings.disabledCategories += "," + disabledCategories.join(",");
+            return settings;
+        }
+        return this.settings;
+    }
+
+    /**
      * Check the current document, adding underlines.
      */
     public async runDetection(editor: EditorView, range?: LTRange): Promise<boolean> {
-        const file = this.app.workspace.getActiveFile();
-        const cache = file && this.app.metadataCache.getFileCache(file);
-        const language = cache?.frontmatter?.lt_language;
+        let settings = this.getActiveFileSettings();
 
         const selection = editor.state.selection.main;
         if (!range && !selection.empty) range = { ...selection };
@@ -490,7 +532,7 @@ export default class LanguageToolPlugin extends Plugin {
             console.info(`Checking ${annotations.length()} characters...`);
             console.debug("Text", JSON.stringify(annotations, undefined, "  "));
 
-            matches = await api.check(this.settings, offset, annotations, language);
+            matches = await api.check(settings, offset, annotations);
             // update range to the checked text
             if (range) range = { from: offset, to: offset + annotations.length() };
         } catch (e) {
@@ -515,7 +557,7 @@ export default class LanguageToolPlugin extends Plugin {
         }
 
         if (matches) {
-            const spellcheckDictionary = this.settings.dictionary;
+            const spellcheckDictionary = settings.dictionary;
 
             for (const match of matches) {
                 // Fixes a bug where the match is outside the document

@@ -8,7 +8,8 @@ export function autoCheckListener(plugin: LanguageToolPlugin): Extension {
     let maxRange = -Infinity;
 
     return EditorView.updateListener.of(update => {
-        if (!update.docChanged || !plugin.settings.shouldAutoCheck) return;
+        let settings = plugin.getActiveFileSettings();
+        if (!update.docChanged || !settings.shouldAutoCheck) return;
 
         // Currently we have the issue that underlines sometimes do not move correctly
         // One problem might be that an update comes in between starting and applying a check
