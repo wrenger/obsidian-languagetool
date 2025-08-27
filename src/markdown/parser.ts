@@ -9,17 +9,13 @@ import { frontmatterFromMarkdown } from "mdast-util-frontmatter";
 import { AnnotatedText } from "../annotated";
 import { wikiLink } from "./micromark-wikilink";
 import { wikiLinkFromMarkdown } from "./mdast-wikilink";
+import * as api from "../api";
 
 const ESCAPE = /\\[!"#$%&'()*+,\-.\/:;<=>?@\[\\\]^_`{|}~]/g;
 
-export interface LTRange {
-    from: number;
-    to: number;
-}
-
 export async function parseAndAnnotate(
     text: string,
-    range?: LTRange
+    range?: api.LTRange
 ): Promise<{ offset: number; annotations: AnnotatedText }> {
     const tree = fromMarkdown(text, {
         extensions: [gfm(), frontmatter(["yaml"]), wikiLink({ aliasDivider: "|" })],
@@ -46,9 +42,9 @@ class AnnotationVisitor {
     output_start?: number;
     output_end?: number;
     offset: number;
-    range?: LTRange;
+    range?: api.LTRange;
 
-    constructor(raw: string, range?: LTRange) {
+    constructor(raw: string, range?: api.LTRange) {
         this.raw = raw;
         this.output = new AnnotatedText();
         this.offset = 0;

@@ -28,7 +28,6 @@ import {
 } from "./editor/underlines";
 import { cmpIgnoreCase, setDifference, setIntersect, setUnion } from "./helpers";
 import * as markdown from "./markdown/parser";
-import { LTRange } from "./markdown/parser";
 
 export default class LanguageToolPlugin extends Plugin {
     public settings: LTSettings;
@@ -134,7 +133,7 @@ export default class LanguageToolPlugin extends Plugin {
                 // @ts-expect-error, not typed
                 const editorView = editor.cm as EditorView;
                 const changes: ChangeSpec[] = [];
-                const effects: StateEffect<LTRange>[] = [];
+                const effects: StateEffect<api.LTRange>[] = [];
                 editorView.state
                     .field(underlineDecoration)
                     .between(0, Infinity, (from, to, value) => {
@@ -271,14 +270,14 @@ export default class LanguageToolPlugin extends Plugin {
                 item.setSection("spellcheck");
                 // @ts-expect-error, not typed
                 const submenu: Menu = item.setSubmenu();
-                this.populateSuggestionSubmenu(submenu, match, editor);
+                this.populateSuggestionSubmenu(submenu, match, cursor, editor);
             });
             cursor.next();
         }
         return populated;
     }
 
-    public populateSuggestionSubmenu(submenu: Menu, match: api.LTMatch, editor: EditorView): void {
+    public populateSuggestionSubmenu(submenu: Menu, match: api.LTMatch, range: api.LTRange, editor: EditorView): void {
         if (match.message || match.title) {
             submenu.addItem(item => {
                 let title = new DocumentFragment();
@@ -301,12 +300,8 @@ export default class LanguageToolPlugin extends Plugin {
                 item.setTitle(replacement ? JSON.stringify(replacement) : "(delete)");
                 item.onClick(() => {
                     editor.dispatch({
-                        changes: {
-                            from: match.from,
-                            to: match.to,
-                            insert: replacement,
-                        },
-                        effects: [clearUnderlinesInRange.of(match)],
+                        changes: { ...range, insert: replacement },
+                        effects: [clearUnderlinesInRange.of(range)],
                     });
                 });
             });
@@ -331,7 +326,7 @@ export default class LanguageToolPlugin extends Plugin {
                 subItem.setTitle("Ignore suggestion");
                 subItem.setIcon("cross");
                 subItem.onClick(() => {
-                    editor.dispatch({ effects: [clearUnderlinesInRange.of(match)] });
+                    editor.dispatch({ effects: [clearUnderlinesInRange.of(range)] });
                 });
             });
 
@@ -395,8 +390,7 @@ export default class LanguageToolPlugin extends Plugin {
                     effects: [
                         addUnderline.of({
                             text: word,
-                            from: selection.from,
-                            to: selection.to,
+                            range: selection,
                             title: "Synonyms",
                             message: "",
                             categoryId: "SYNONYMS",
@@ -509,7 +503,7 @@ export default class LanguageToolPlugin extends Plugin {
     /**
      * Check the current document, adding underlines.
      */
-    public async runDetection(editor: EditorView, range?: LTRange): Promise<boolean> {
+    public async runDetection(editor: EditorView, range?: api.LTRange): Promise<boolean> {
         let settings = this.getActiveFileSettings();
 
         const selection = editor.state.selection.main;
@@ -518,7 +512,7 @@ export default class LanguageToolPlugin extends Plugin {
         const text = editor.state.sliceDoc();
         if (!text.trim()) return false;
 
-        let matches: api.LTMatch[];
+        let matches: (api.LTMatch & { range: api.LTRange })[];
         let longNotice: Notice | undefined = undefined;
         try {
             this.setStatusBarWorking();
@@ -547,7 +541,7 @@ export default class LanguageToolPlugin extends Plugin {
             if (longNotice) longNotice.hide();
         }
 
-        const effects: StateEffect<LTRange | null>[] = [];
+        const effects: StateEffect<any>[] = [];
 
         // remove previous underlines
         if (range) {
@@ -561,7 +555,7 @@ export default class LanguageToolPlugin extends Plugin {
 
             for (const match of matches) {
                 // Fixes a bug where the match is outside the document
-                if (match.to > editor.state.doc.length) continue;
+                if (match.range.to > editor.state.doc.length) continue;
                 // Ignore typos that are in the spellcheck dictionary
                 if (match.categoryId === "TYPOS" && spellcheckDictionary.includes(match.text))
                     continue;

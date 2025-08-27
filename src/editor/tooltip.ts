@@ -10,7 +10,8 @@ import { SUGGESTIONS } from "settings";
 function createTooltip(
     plugin: LanguageToolPlugin,
     view: EditorView,
-    match: api.LTMatch
+    match: api.LTMatch,
+    range: api.LTRange,
 ): HTMLElement {
     const replacements = match.replacements.slice(0, SUGGESTIONS / 2);
     const category = match.categoryId;
@@ -27,12 +28,8 @@ function createTooltip(
                     button.setButtonText(btnText || "(delete)");
                     button.onClick(() => {
                         view.dispatch({
-                            changes: [{
-                                from: match.from,
-                                to: match.to,
-                                insert: btnText,
-                            }],
-                            effects: [clearUnderlinesInRange.of(match)],
+                            changes: [{ ...range, insert: btnText }],
+                            effects: [clearUnderlinesInRange.of(range)],
                         });
                     });
                 }
@@ -61,7 +58,7 @@ function createTooltip(
                     setIcon(button.createSpan(), "cross");
                     button.createSpan({ text: "Ignore" });
                     button.onclick = () =>
-                        view.dispatch({ effects: [clearUnderlinesInRange.of(match)] });
+                        view.dispatch({ effects: [clearUnderlinesInRange.of(range)] });
                 });
                 if (category !== "SYNONYMS") {
                     container.createDiv({ cls: "lt-ignore-btn" }, button => {
@@ -97,6 +94,7 @@ function createTooltip(
             // \u00A0 is a non-breaking space
             popup.createDiv({ cls: "lt-info", text: `Category:\u00A0${category}` });
             popup.createDiv({ cls: "lt-info", text: `Rule:\u00A0${ruleId}` });
+            popup.createDiv({ cls: "lt-info", text: `Text:\u00A0${match.text} (${range.from}-${range.to})` });
         });
     });
 }
@@ -109,6 +107,7 @@ function lintTooltip(plugin: LanguageToolPlugin, view: EditorView, pos: number, 
     let cursor = underlines.iter(pos);
     if (cursor.value != null && cursor.from <= pos && cursor.to >= pos) {
         let match = cursor.value.spec.underline as api.LTMatch;
+        console.log(cursor);
         return {
             pos: cursor.from,
             end: cursor.to,
@@ -117,7 +116,7 @@ function lintTooltip(plugin: LanguageToolPlugin, view: EditorView, pos: number, 
             arrow: false,
             clip: false,
             create: view => ({
-                dom: createTooltip(plugin, view, match),
+                dom: createTooltip(plugin, view, match, cursor),
             }),
         };
     }

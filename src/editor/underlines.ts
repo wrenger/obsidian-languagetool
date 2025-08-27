@@ -4,22 +4,21 @@ import { syntaxTree, tokenClassNodeProp } from "@codemirror/language";
 import { Tree } from "@lezer/common";
 import { categoryCssClass } from "../helpers";
 import * as api from "api";
-import { LTRange } from "markdown/parser";
 
 export const ignoreListRegEx = /(frontmatter|code|math|templater|blockid|hashtag)/;
 
 type UnderlineMatcher = (underline: api.LTMatch) => boolean;
 
 /** Add new underline */
-export const addUnderline = StateEffect.define<api.LTMatch>();
+export const addUnderline = StateEffect.define<(api.LTMatch & { range: api.LTRange })>();
 /** Remove all underlines */
 export const clearAllUnderlines = StateEffect.define();
 /** Remove underlines in range */
-export const clearUnderlinesInRange = StateEffect.define<LTRange>();
+export const clearUnderlinesInRange = StateEffect.define<api.LTRange>();
 /** Ignore a specific underline */
 export const clearMatchingUnderlines = StateEffect.define<UnderlineMatcher>();
 
-function rangeOverlapping(first: LTRange, second: LTRange): boolean {
+function rangeOverlapping(first: api.LTRange, second: api.LTRange): boolean {
     return (
         (first.from <= second.from && second.from <= first.to) ||
         (first.from <= second.to && second.to <= first.to) ||
@@ -53,12 +52,12 @@ export const underlineDecoration = StateField.define<DecorationSet>({
         };
 
         // Ignore certain rules in special cases
-        const isRuleAllowed = (underline: api.LTMatch) => {
+        const isRuleAllowed = (underline: api.LTMatch, range: api.LTRange) => {
             if (!tree) tree = syntaxTree(tr.state);
 
             // Don't display whitespace rules in tables
             const lineNodeProp = tree
-                .resolve(tr.newDoc.lineAt(underline.from).from, 1)
+                .resolve(tr.newDoc.lineAt(range.from).from, 1)
                 .type.prop(tokenClassNodeProp);
             if (lineNodeProp?.includes("table")) {
                 if (underline.ruleId === "WHITESPACE_RULE") {
@@ -78,13 +77,14 @@ export const underlineDecoration = StateField.define<DecorationSet>({
         for (const e of tr.effects) {
             if (e.is(addUnderline)) {
                 const underline = e.value;
-                const key = `${underline.from},${underline.to}`;
+                const range = underline.range;
+                const key = `${range.from},${range.to}`;
 
                 if (
                     !seenRanges.has(key) &&
-                    canDecorate(underline.from) &&
-                    canDecorate(underline.to) &&
-                    isRuleAllowed(underline)
+                    canDecorate(range.from) &&
+                    canDecorate(range.to) &&
+                    isRuleAllowed(underline, range)
                 ) {
                     seenRanges.add(key);
                     underlines = underlines.update({
@@ -92,7 +92,7 @@ export const underlineDecoration = StateField.define<DecorationSet>({
                             Decoration.mark({
                                 class: `lt-underline ${categoryCssClass(underline.categoryId)}`,
                                 underline,
-                            }).range(underline.from, underline.to),
+                            }).range(range.from, range.to),
                         ],
                     });
                 }

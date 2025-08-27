@@ -8,13 +8,16 @@ import { AnnotatedText } from "./annotated";
 /** A typo or grammar issue detected by LanguageTool */
 export interface LTMatch {
     text: string;
-    from: number;
-    to: number;
     title: string;
     message: string;
     replacements: string[];
     categoryId: string;
     ruleId: string;
+}
+
+export interface LTRange {
+    from: number;
+    to: number;
 }
 
 /**
@@ -24,7 +27,7 @@ export async function check(
     settings: LTSettings,
     offset: number,
     annotated: AnnotatedText,
-): Promise<LTMatch[]> {
+): Promise<(LTMatch & { range: LTRange })[]> {
     const data = annotated.stringify();
 
     const lang = settings.staticLanguage ?? "auto";
@@ -69,9 +72,8 @@ export async function check(
         const from = jsonPath<number>("$.offset@number()", match);
         const to = from + jsonPath<number>("$.length@number()", match);
         return {
+            range: { from: offset + from, to: offset + to },
             text: annotated.extractSlice(from, to) || "",
-            from: offset + from,
-            to: offset + to,
             title: jsonPath<string>("$.shortMessage@string()", match),
             message: jsonPath<string>("$.message@string()", match),
             replacements: jsonPathA<string>("$.replacements[*].value@string()", match),
