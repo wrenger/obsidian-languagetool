@@ -35,6 +35,28 @@ You can also specify a document language in the properties of a document. Just a
 
 **Custom Spellchecker Dictionary:** You can add words to this dictionary directly from the editor and remove them again in the Obsidian settings (`Settings / LanguageTool / Spellcheck Dictionary`).
 
+## Note Specific Configuration
+
+You can overwrite some configuration options in notes. This allows you to customize LanguageTool for a specific note.
+The following properties can be added to a note:
+
+```md
+---
+lt-language: en-US     // text: language code or "auto"
+lt-picky: true         // boolean: Provide more style suggestions
+lt-autoCheck: true     // boolean: Check as you type
+lt-dictionary:         // multitext: Ingored word
+  - foo
+  - bar
+lt-disabledRules:      // multitext: Ignored rules
+  - ARROWS
+lt-disabledCategories: // multitext: Ignored categories
+  - STYLE
+---
+
+# Some Note...
+```
+
 ## Premium Accounts
 
 We support LanguageTool Premium.
