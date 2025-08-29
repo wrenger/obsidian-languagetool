@@ -107,7 +107,6 @@ function lintTooltip(plugin: LanguageToolPlugin, view: EditorView, pos: number, 
     let cursor = underlines.iter(pos);
     if (cursor.value != null && cursor.from <= pos && cursor.to >= pos) {
         let match = cursor.value.spec.underline as api.LTMatch;
-        console.log(cursor);
         return {
             pos: cursor.from,
             end: cursor.to,
