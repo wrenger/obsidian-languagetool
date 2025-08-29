@@ -6,10 +6,10 @@ This plugin for [Obsidian.md](https://obsidian.md) integrates [LanguageTool](htt
 
 > This is a fork of the original [obsidian-languagetool-plugin](https://github.com/Clemens-E/obsidian-languagetool-plugin), with the following changes:
 >
-> - Added support for synonyms and mother tongue
-> - Add tooltip button for disabling rules
-> - Remove old code and clean up the codebase, following Obsidian's best practices
-> - Fix multiple bugs and freezes
+> - Support for synonyms and mother tongue
+> - Tooltip button for disabling rules
+> - Note-specific settings
+> - Clean up the codebase, and fix multiple bugs and freezes
 
 **Note:** if you are worried about the privacy of your notes, you should self-host LanguageTool locally on your PC or on a server.
 If you decide to self-host the service, you must change the link in the configuration accordingly.
@@ -31,14 +31,13 @@ After installing and enabling the plugin, you can set up hotkeys (under Settings
 
 **LanguageTool tries to auto-detect the language used.** Selecting a specific language (under `Settings / LanguageTool / Static language`) usually is not necessary. This feature enables the user to spellcheck in different languages within the same document (e.g., a dissertation written in English with quotes in a foreign language), which is ordinarily not possible with the built-in spellcheck function of Obsidian.
 
-You can also specify a document language in the properties of a document. Just add a property (usually `crtl+;`) with the name `lt_language` and a language code (`en-US`, `de-DE`, ...) as value.
-
 **Custom Spellchecker Dictionary:** You can add words to this dictionary directly from the editor and remove them again in the Obsidian settings (`Settings / LanguageTool / Spellcheck Dictionary`).
 
-## Note Specific Configuration
+## Note-Specific Configuration
 
-You can overwrite some configuration options in notes. This allows you to customize LanguageTool for a specific note.
-The following properties can be added to a note:
+You can overwrite various configuration options in notes.
+This allows you to customize LanguageTool for a specific note.
+The following settings can be in the note's properties:
 
 ```md
 ---
@@ -61,14 +60,14 @@ lt-disabledCategories: // multitext: Ignored categories
 
 We support LanguageTool Premium.
 
-> ⚠️ Please report any bugs, issues, or suggestions related to this Plugin to us (this GitHub Repository) directly and **_not_** to LanguageTool, as this is an unofficial community plugin
+> ⚠️ Please report any bugs, issues, or suggestions related to this plugin to us (this GitHub repository) directly and **_not_** to LanguageTool, as this is an unofficial community plugin.
 
-You (obviously) need a Premium Account and an API key to use the premium features.
+You (obviously) need a premium account and an API key to use the premium features.
 You can generate your API key at <https://languagetool.org/editor/settings/access-tokens>
 
 Configure your email, API key, and the new URL (https://api.languagetoolplus.com) in the plugin settings
 
-## Manually installing the plugin
+## Manually Installing the Plugin
 
 - Run `yarn install` and `yarn build` in the root directory of the repository.
 - Copy over `main.js`, `styles.css`, `manifest.json` from the latest release to your vault `VaultFolder/.obsidian/plugins/languagetool/`.
