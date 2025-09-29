@@ -28,6 +28,6 @@ export function autoCheckListener(plugin: LanguageToolPlugin): Extension {
 
             minRange = Infinity;
             maxRange = -Infinity;
-        }, plugin.settings.autoCheckDelay);
+        }, plugin.settings.options.autoCheckDelay);
     });
 }

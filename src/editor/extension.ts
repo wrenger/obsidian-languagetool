@@ -1,4 +1,3 @@
-import { tooltips } from "@codemirror/view";
 import LanguageToolPlugin from "main";
 import { autoCheckListener } from "./autoCheck";
 import { underlineDecoration } from "./underlines";

@@ -1,4 +1,4 @@
-import { endpointFromUrl, LTSettings } from "./settings";
+import { endpointFromUrl, LTOptions } from "./settings";
 import { RequestUrlParam, RequestUrlResponse, requestUrl } from "obsidian";
 import { JSONPath } from "jsonpath-plus";
 import { AnnotatedText } from "./annotated";
@@ -24,7 +24,7 @@ export interface LTRange {
  * The main function of LanguageTool, checking text for spell/grammar errors.
  */
 export async function check(
-    settings: LTSettings,
+    settings: Readonly<LTOptions>,
     offset: number,
     annotated: AnnotatedText,
 ): Promise<(LTMatch & { range: LTRange })[]> {
@@ -96,7 +96,7 @@ export async function languages(serverUrl: string): Promise<Language[]> {
     return languages as Language[];
 }
 
-export async function words(settings: LTSettings): Promise<string[]> {
+export async function words(settings: Readonly<LTOptions>): Promise<string[]> {
     if (settings.username == null || settings.apikey == null)
         throw Error(`Syncing words is only supported for premium users`);
 
@@ -115,7 +115,7 @@ export async function words(settings: LTSettings): Promise<string[]> {
         throw new Error(`Requesting words failed\n${e}`);
     }
 }
-export async function wordsAdd(settings: LTSettings, word: string): Promise<boolean> {
+export async function wordsAdd(settings: Readonly<LTOptions>, word: string): Promise<boolean> {
     if (settings.username == null || settings.apikey == null)
         throw Error(`Syncing words is only supported for premium users`);
 
@@ -135,7 +135,7 @@ export async function wordsAdd(settings: LTSettings, word: string): Promise<bool
         throw new Error(`Adding words failed\n${e}`);
     }
 }
-export async function wordsDel(settings: LTSettings, word: string): Promise<boolean> {
+export async function wordsDel(settings: Readonly<LTOptions>, word: string): Promise<boolean> {
     if (settings.username == null || settings.apikey == null)
         throw Error(`Syncing words is only supported for premium users`);
 

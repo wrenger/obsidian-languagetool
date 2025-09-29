@@ -53,7 +53,32 @@ export function getEndpoint(url: string): Endpoint {
     return endpoints[endpointFromUrl(url)];
 }
 
-export interface LTSettings {
+/** Wrapper for LanguageTool settings */
+export abstract class LTSettings {
+    private _options: LTOptions;
+    constructor() {
+        this._options = { ...DEFAULT_SETTINGS };
+    }
+    public get options(): Readonly<LTOptions> {
+        return this._options;
+    }
+    public async update(options: Partial<LTOptions>): Promise<void> {
+        const newOptions = { ...this._options, ...options };
+        // Only save if something has changed
+        if (JSON.stringify(newOptions) !== JSON.stringify(this._options)) {
+            this._options = newOptions;
+            await this.save(this._options);
+        }
+    }
+    public async load(): Promise<void> {
+        const options = await this.loadOptions();
+        this._options = { ...DEFAULT_SETTINGS, ...options };
+    }
+    protected abstract loadOptions(): Promise<LTOptions>;
+    protected abstract save(options: LTOptions): Promise<void>;
+}
+
+export interface LTOptions {
     serverUrl: string;
     apikey?: string;
     username?: string;
@@ -78,7 +103,7 @@ export interface LTSettings {
     disabledRules?: string;
 }
 
-export const DEFAULT_SETTINGS: LTSettings = {
+export const DEFAULT_SETTINGS: LTOptions = {
     serverUrl: endpoints["standard"].url,
     autoCheckDelay: endpoints.standard.minDelay,
     shouldAutoCheck: false,
@@ -116,17 +141,19 @@ export class LTSettingsTab extends PluginSettingTab {
         this.plugin = plugin;
     }
 
-    private configureCheckDelay(slider: SliderComponent, value: EndpointType): void {
+    private async configureCheckDelay(slider: SliderComponent, value: EndpointType): Promise<void> {
         const minAutoCheckDelay = endpoints[value].minDelay;
-        this.plugin.settings.autoCheckDelay = Math.clamp(
-            this.plugin.settings.autoCheckDelay,
-            minAutoCheckDelay,
-            autoCheckDelayMax
-        );
+        await this.plugin.settings.update({
+            autoCheckDelay: Math.clamp(
+                this.plugin.settings.options.autoCheckDelay,
+                minAutoCheckDelay,
+                autoCheckDelayMax
+            )
+        });
         slider.setLimits(minAutoCheckDelay, autoCheckDelayMax, autoCheckDelayStep);
     }
 
-    public async notifyEndpointChange(settings: LTSettings): Promise<void> {
+    public async notifyEndpointChange(settings: LTOptions): Promise<void> {
         for (const listener of this.endpointListeners) {
             await listener(settings.serverUrl);
         }
@@ -136,7 +163,7 @@ export class LTSettingsTab extends PluginSettingTab {
         dropdown: DropdownComponent,
         code: string
     ): Promise<void> {
-        const languageVariety = this.plugin.settings.languageVariety;
+        const languageVariety = this.plugin.settings.options.languageVariety;
         const variants = languageVariants(this.languages, code);
         languageVariety[code] = languageVariety[code] ?? Object.keys(variants)[0];
 
@@ -145,7 +172,7 @@ export class LTSettingsTab extends PluginSettingTab {
             .setValue(languageVariety[code])
             .onChange(async value => {
                 languageVariety[code] = value;
-                await this.plugin.saveSettings();
+                await this.plugin.settings.update({ languageVariety });
             });
 
         this.languageListeners.push(async l => {
@@ -190,7 +217,7 @@ export class LTSettingsTab extends PluginSettingTab {
                 });
             });
 
-        let endpoint = endpointFromUrl(settings.serverUrl);
+        let endpoint = endpointFromUrl(settings.options.serverUrl);
         let autoCheckDelaySlider: SliderComponent | null = null;
 
         new Setting(containerEl)
@@ -212,38 +239,36 @@ export class LTSettingsTab extends PluginSettingTab {
                         .setValue(endpoint)
                         .onChange(async value => {
                             endpoint = value as EndpointType;
-                            settings.serverUrl = endpoints[endpoint].url;
+                            await settings.update({ serverUrl: endpoints[endpoint].url });
 
                             if (input)
-                                input.setValue(settings.serverUrl).setDisabled(value !== "custom");
+                                input.setValue(settings.options.serverUrl).setDisabled(value !== "custom");
 
                             if (autoCheckDelaySlider)
                                 this.configureCheckDelay(autoCheckDelaySlider, endpoint);
 
-                            await this.notifyEndpointChange(settings);
-
-                            await this.plugin.saveSettings();
+                            await this.notifyEndpointChange(settings.options);
                         });
                 });
                 setting.addText(text => {
                     input = text;
                     text.setPlaceholder("https://your-custom-url.com")
-                        .setValue(settings.serverUrl)
+                        .setValue(settings.options.serverUrl)
                         .setDisabled(endpoint !== "custom")
                         .onChange(async value => {
-                            settings.serverUrl = value
-                                .replace(/\/v2\/check\/$/, "")
-                                .replace(/\/$/, "");
+                            await settings.update({
+                                serverUrl: value
+                                    .replace(/\/v2\/check\/$/, "")
+                                    .replace(/\/$/, "")
+                            });
 
-                            endpoint = endpointFromUrl(settings.serverUrl);
+                            endpoint = endpointFromUrl(settings.options.serverUrl);
                             if (endpoint !== "custom") {
                                 dropdown?.setValue(endpoint);
                                 input?.setDisabled(true);
                             }
 
-                            await this.notifyEndpointChange(settings);
-
-                            await this.plugin.saveSettings();
+                            await this.notifyEndpointChange(settings.options);
                         });
                 });
             });
@@ -254,10 +279,9 @@ export class LTSettingsTab extends PluginSettingTab {
             .addText(text =>
                 text
                     .setPlaceholder("peterlustig@example.com")
-                    .setValue(settings.username || "")
+                    .setValue(settings.options.username || "")
                     .onChange(async value => {
-                        settings.username = value.replace(/\s+/g, "");
-                        await this.plugin.saveSettings();
+                        await settings.update({ username: value.replace(/\s+/g, "") });
                     })
             );
         new Setting(containerEl)
@@ -272,23 +296,21 @@ export class LTSettingsTab extends PluginSettingTab {
                 })
             )
             .addText(text =>
-                text.setValue(settings.apikey || "").onChange(async value => {
-                    settings.apikey = value.replace(/\s+/g, "");
-                    if (settings.apikey && endpoint !== "premium") {
+                text.setValue(settings.options.apikey || "").onChange(async value => {
+                    await settings.update({ apikey: value.replace(/\s+/g, "") });
+                    if (settings.options.apikey && endpoint !== "premium") {
                         new Notice(
                             "You have entered an API Key but you are not using the Premium Endpoint"
                         );
                     }
-                    await this.plugin.saveSettings();
                 })
             );
         new Setting(containerEl)
             .setName("Auto check text")
             .setDesc("Check text as you type")
             .addToggle(component => {
-                component.setValue(settings.shouldAutoCheck).onChange(async value => {
-                    settings.shouldAutoCheck = value;
-                    await this.plugin.saveSettings();
+                component.setValue(settings.options.shouldAutoCheck).onChange(async value => {
+                    await settings.update({ shouldAutoCheck: value });
                 });
             });
         new Setting(containerEl)
@@ -299,10 +321,9 @@ export class LTSettingsTab extends PluginSettingTab {
 
                 this.configureCheckDelay(component, endpoint);
                 component
-                    .setValue(settings.autoCheckDelay)
+                    .setValue(settings.options.autoCheckDelay)
                     .onChange(async value => {
-                        settings.autoCheckDelay = value;
-                        await this.plugin.saveSettings();
+                        await settings.update({ autoCheckDelay: value });
                     })
                     .setDynamicTooltip();
             });
@@ -310,8 +331,8 @@ export class LTSettingsTab extends PluginSettingTab {
         function synonymsDesc(frag: DocumentFragment): void {
             frag.appendText("Enables the context menu for synonyms fetched from");
             frag.createEl("br");
-            if (settings.synonyms != null) {
-                const synonyms = api.SYNONYMS[settings.synonyms];
+            if (settings.options.synonyms != null) {
+                const synonyms = api.SYNONYMS[settings.options.synonyms];
                 if (!synonyms) {
                     frag.appendText(" (unknown API)");
                     return;
@@ -334,9 +355,8 @@ export class LTSettingsTab extends PluginSettingTab {
             for (const lang of Object.keys(api.SYNONYMS)) {
                 component.addOption(lang, lang);
             }
-            component.setValue(settings.synonyms ?? "none").onChange(async value => {
-                settings.synonyms = value !== "none" ? value : undefined;
-                await this.plugin.saveSettings();
+            component.setValue(settings.options.synonyms ?? "none").onChange(async value => {
+                await settings.update({ synonyms: value !== "none" ? value : undefined });
                 synonyms.setDesc(createFragment(synonymsDesc));
             });
         });
@@ -365,10 +385,9 @@ export class LTSettingsTab extends PluginSettingTab {
                                     .map(v => [v.longCode, v.name])
                             )
                         )
-                        .setValue(settings.motherTongue ?? "none")
+                        .setValue(settings.options.motherTongue ?? "none")
                         .onChange(async value => {
-                            settings.motherTongue = value !== "none" ? value : undefined;
-                            await this.plugin.saveSettings();
+                            await settings.update({ motherTongue: value !== "none" ? value : undefined });
                         });
                 });
             });
@@ -399,10 +418,9 @@ export class LTSettingsTab extends PluginSettingTab {
                     component
                         .addOption("auto", "Auto Detect")
                         .addOptions(Object.fromEntries(staticLang.map(v => [v.longCode, v.name])))
-                        .setValue(settings.staticLanguage ?? "auto")
+                        .setValue(settings.options.staticLanguage ?? "auto")
                         .onChange(async value => {
-                            settings.staticLanguage = value !== "auto" ? value : undefined;
-                            await this.plugin.saveSettings();
+                            await settings.update({ staticLanguage: value !== "auto" ? value : undefined });
                         });
                 });
             });
@@ -449,10 +467,10 @@ export class LTSettingsTab extends PluginSettingTab {
             .addToggle(component => {
                 component
                     .setDisabled(endpoint !== "premium")
-                    .setValue(settings.syncDictionary)
+                    .setValue(settings.options.syncDictionary)
                     .onChange(async value => {
-                        settings.syncDictionary = value;
-                        await this.plugin.syncDictionary();
+                        await settings.update({ syncDictionary: value });
+                        if (value) await this.plugin.syncDictionary();
                     });
                 this.endpointListeners.push(async url => {
                     component.setDisabled(endpointFromUrl(url) !== "premium");
@@ -485,9 +503,8 @@ export class LTSettingsTab extends PluginSettingTab {
                 "Provides more style and tonality suggestions, detects long or complex sentences, recognizes colloquialism and redundancies, proactively suggests synonyms for commonly overused words"
             )
             .addToggle(component => {
-                component.setValue(settings.pickyMode).onChange(async value => {
-                    settings.pickyMode = value;
-                    await this.plugin.saveSettings();
+                component.setValue(settings.options.pickyMode).onChange(async value => {
+                    await settings.update({ pickyMode: value });
                 });
             });
 
@@ -497,10 +514,9 @@ export class LTSettingsTab extends PluginSettingTab {
             .addText(text =>
                 text
                     .setPlaceholder("CATEGORY_1,CATEGORY_2")
-                    .setValue(settings.enabledCategories ?? "")
+                    .setValue(settings.options.enabledCategories ?? "")
                     .onChange(async value => {
-                        settings.enabledCategories = value.replace(/\s+/g, "");
-                        await this.plugin.saveSettings();
+                        await settings.update({ enabledCategories: value.replace(/\s+/g, "") });
                     })
             );
 
@@ -510,10 +526,9 @@ export class LTSettingsTab extends PluginSettingTab {
             .addText(text =>
                 text
                     .setPlaceholder("CATEGORY_1,CATEGORY_2")
-                    .setValue(settings.disabledCategories ?? "")
+                    .setValue(settings.options.disabledCategories ?? "")
                     .onChange(async value => {
-                        settings.disabledCategories = value.replace(/\s+/g, "");
-                        await this.plugin.saveSettings();
+                        await settings.update({ disabledCategories: value.replace(/\s+/g, "") });
                     })
             );
 
@@ -523,10 +538,9 @@ export class LTSettingsTab extends PluginSettingTab {
             .addText(text =>
                 text
                     .setPlaceholder("RULE_1,RULE_2")
-                    .setValue(settings.enabledRules ?? "")
+                    .setValue(settings.options.enabledRules ?? "")
                     .onChange(async value => {
-                        settings.enabledRules = value.replace(/\s+/g, "");
-                        await this.plugin.saveSettings();
+                        await settings.update({ enabledRules: value.replace(/\s+/g, "") });
                     })
             );
 
@@ -536,14 +550,13 @@ export class LTSettingsTab extends PluginSettingTab {
             .addText(text =>
                 text
                     .setPlaceholder("RULE_1,RULE_2")
-                    .setValue(settings.disabledRules ?? "")
+                    .setValue(settings.options.disabledRules ?? "")
                     .onChange(async value => {
-                        settings.disabledRules = value.replace(/\s+/g, "");
-                        await this.plugin.saveSettings();
+                        await settings.update({ disabledRules: value.replace(/\s+/g, "") });
                     })
             );
 
-        await this.notifyEndpointChange(settings);
+        await this.notifyEndpointChange(settings.options);
     }
 }
 
@@ -555,11 +568,11 @@ export class DictionaryModal extends Modal {
         super(app);
         this.setTitle("Spellcheck dictionary");
         this.plugin = plugin;
-        this.words = plugin.settings.dictionary;
+        this.words = plugin.settings.options.dictionary;
     }
 
     async onOpen() {
-        this.words = this.plugin.settings.dictionary;
+        this.words = this.plugin.settings.options.dictionary;
         const { contentEl } = this;
 
         const createButtons = (container: HTMLDivElement) => {
@@ -582,16 +595,14 @@ export class DictionaryModal extends Modal {
         };
 
         let buttonContainer: null | HTMLDivElement = null;
-        contentEl.createDiv({ cls: "multi-select-container" }, container => {
+        contentEl.createDiv({ cls: ["multi-select-container", "lt-dictionary-words"] }, container => {
             buttonContainer = container;
             createButtons(container);
         });
 
-        this.plugin.syncDictionary().then(changed => {
-            if (changed) {
-                this.words = this.plugin.settings.dictionary;
-                if (buttonContainer) createButtons(buttonContainer);
-            }
+        this.plugin.syncDictionary().then(() => {
+            this.words = this.plugin.settings.options.dictionary;
+            if (buttonContainer) createButtons(buttonContainer);
         });
 
         let newWord = "";
@@ -627,7 +638,7 @@ export class DictionaryModal extends Modal {
 
     async onClose() {
         this.contentEl.empty();
-        this.plugin.settings.dictionary = this.words;
+        await this.plugin.settings.update({ dictionary: this.words });
         await this.plugin.syncDictionary();
     }
 }

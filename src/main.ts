@@ -11,8 +11,8 @@ import {
 import { Decoration, EditorView } from "@codemirror/view";
 import { ChangeSpec, StateEffect } from "@codemirror/state";
 import {
-    DEFAULT_SETTINGS,
     endpointFromUrl,
+    LTOptions,
     LTSettings,
     LTSettingsTab,
     SUGGESTIONS,
@@ -29,8 +29,23 @@ import {
 import { cmpIgnoreCase, setDifference, setIntersect, setUnion } from "./helpers";
 import * as markdown from "./markdown/parser";
 
+class LTPluginSettings extends LTSettings {
+    private plugin: Plugin;
+    constructor(plugin: Plugin) {
+        super();
+        this.plugin = plugin;
+    }
+    protected loadOptions(): Promise<LTOptions> {
+        return this.plugin.loadData();
+    }
+    protected save(options: LTOptions): Promise<void> {
+        console.info("Saving settings", options);
+        return this.plugin.saveData(options);
+    }
+}
+
 export default class LanguageToolPlugin extends Plugin {
-    public settings: LTSettings;
+    public settings: LTPluginSettings = new LTPluginSettings(this);
     private statusBarItem: HTMLElement;
 
     private isLoading = false;
@@ -40,7 +55,7 @@ export default class LanguageToolPlugin extends Plugin {
 
     public async onload(): Promise<void> {
         // Settings
-        await this.loadSettings();
+        await this.settings.load();
 
         this.settingTab = new LTSettingsTab(this.app, this);
         this.addSettingTab(this.settingTab);
@@ -74,14 +89,11 @@ export default class LanguageToolPlugin extends Plugin {
         }
 
         // Spellcheck Dictionary
-        const dictionary: Set<string> = new Set(this.settings.dictionary.map(w => w.trim()));
+        const dictionary: Set<string> = new Set(this.settings.options.dictionary.map(w => w.trim()));
         dictionary.delete("");
-        this.settings.dictionary = [...dictionary].sort(cmpIgnoreCase);
-
+        await this.settings.update({ dictionary: [...dictionary].sort(cmpIgnoreCase) });
         // Sync with language tool
-        this.syncDictionary();
-
-        await this.saveSettings();
+        await this.syncDictionary();
     }
 
     public onunload() {
@@ -109,8 +121,7 @@ export default class LanguageToolPlugin extends Plugin {
             name: "Toggle automatic checking",
             icon: "uppercase-lowercase-a",
             callback: async () => {
-                this.settings.shouldAutoCheck = !this.settings.shouldAutoCheck;
-                await this.saveSettings();
+                await this.settings.update({ shouldAutoCheck: !this.settings.options.shouldAutoCheck });
             },
         });
         this.addCommand({
@@ -314,7 +325,9 @@ export default class LanguageToolPlugin extends Plugin {
                 subItem.setTitle("Add to dictionary");
                 subItem.setIcon("plus-with-circle");
                 subItem.onClick(async () => {
-                    this.settings.dictionary.push(match.text);
+                    let dict = [...this.settings.options.dictionary, match.text.trim()];
+                    dict.sort(cmpIgnoreCase);
+                    await this.settings.update({ dictionary: dict });
                     await this.syncDictionary();
                     editor.dispatch({
                         effects: [clearMatchingUnderlines.of(m => m.text === match.text)],
@@ -334,11 +347,12 @@ export default class LanguageToolPlugin extends Plugin {
                 submenu.addItem(subItem => {
                     subItem.setTitle("Disable rule");
                     subItem.setIcon("circle-off");
-                    subItem.onClick(() => {
-                        if (this.settings.disabledRules)
-                            this.settings.disabledRules += "," + match.ruleId;
-                        else this.settings.disabledRules = match.ruleId;
-                        this.saveSettings();
+                    subItem.onClick(async () => {
+                        let disabledRules = this.settings.options.disabledRules;
+                        if (disabledRules)
+                            disabledRules += "," + match.ruleId;
+                        else disabledRules = match.ruleId;
+                        await this.settings.update({ disabledRules });
 
                         editor.dispatch({
                             effects: [clearMatchingUnderlines.of(m => m.ruleId === match.ruleId)],
@@ -354,8 +368,8 @@ export default class LanguageToolPlugin extends Plugin {
     }
 
     private showSynonyms(editor: Editor, checking: boolean = false): boolean {
-        if (!this.settings.synonyms || !(this.settings.synonyms in api.SYNONYMS)) return false;
-        const synonyms = api.SYNONYMS[this.settings.synonyms];
+        if (!this.settings.options.synonyms || !(this.settings.options.synonyms in api.SYNONYMS)) return false;
+        const synonyms = api.SYNONYMS[this.settings.options.synonyms];
         if (!synonyms) return false;
 
         // @ts-expect-error, not typed
@@ -440,14 +454,15 @@ export default class LanguageToolPlugin extends Plugin {
             })
             .addItem(item => {
                 item.setTitle(
-                    this.settings.shouldAutoCheck
+                    this.settings.options.shouldAutoCheck
                         ? "Disable automatic checking"
                         : "Enable automatic checking"
                 );
                 item.setIcon("uppercase-lowercase-a");
                 item.onClick(async () => {
-                    this.settings.shouldAutoCheck = !this.settings.shouldAutoCheck;
-                    await this.saveSettings();
+                    await this.settings.update({
+                        shouldAutoCheck: !this.settings.options.shouldAutoCheck
+                    });
                 });
             })
             .addItem(item => {
@@ -473,7 +488,7 @@ export default class LanguageToolPlugin extends Plugin {
     /**
      * Get the settings for the current file, where values might be reconfigured in the frontmatter.
      */
-    public getActiveFileSettings(): LTSettings {
+    public getActiveFileSettings(): LTOptions {
         const file = this.app.workspace.getActiveFile();
         const cache = file && this.app.metadataCache.getFileCache(file);
 
@@ -486,7 +501,7 @@ export default class LanguageToolPlugin extends Plugin {
             const disabledCategories = cache.frontmatter["lt-disabledCategories"];
 
             // Beware: shallow clone
-            let settings = { ...this.settings };
+            let settings = { ...this.settings.options };
             if (typeof language === "string") settings.staticLanguage = language;
             if (typeof autoCheck === "boolean") settings.shouldAutoCheck = autoCheck;
             if (typeof picky === "boolean") settings.pickyMode = picky;
@@ -497,7 +512,7 @@ export default class LanguageToolPlugin extends Plugin {
                 settings.disabledCategories += "," + disabledCategories.join(",");
             return settings;
         }
-        return this.settings;
+        return this.settings.options;
     }
 
     /**
@@ -583,41 +598,33 @@ Settings: ${JSON.stringify({ ...this.settings, username: "REDACTED", apikey: "RE
         if (this.logs.length > 10) this.logs.shift();
     }
 
-    public async loadSettings(): Promise<void> {
-        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-    }
-
-    public async saveSettings(): Promise<void> {
-        await this.saveData(this.settings);
-    }
-
     public async onExternalSettingsChange() {
-        this.settingTab.notifyEndpointChange(this.settings);
+        this.settingTab.notifyEndpointChange(this.settings.options);
     }
 
     /**
      * Synchronizes with the LanguageTool dictionary,
      * returning whether the local dictionary has been changed.
      */
-    public async syncDictionary(): Promise<boolean> {
+    public async syncDictionary(): Promise<void> {
         if (
-            !this.settings.syncDictionary ||
-            endpointFromUrl(this.settings.serverUrl) !== "premium"
+            !this.settings.options.syncDictionary ||
+            endpointFromUrl(this.settings.options.serverUrl) !== "premium"
         ) {
-            await this.saveSettings();
-            return false;
+            // Nothing to do
+            return;
         }
 
         try {
-            const lastWords = new Set(this.settings.remoteDictionary);
-            let localWords = new Set(this.settings.dictionary);
-            let remoteWords = new Set(await api.words(this.settings));
+            const lastWords = new Set(this.settings.options.remoteDictionary);
+            let localWords = new Set(this.settings.options.dictionary);
+            let remoteWords = new Set(await api.words(this.settings.options));
 
             // words that have been removed locally
             let localRemoved = setDifference(lastWords, localWords);
             localRemoved = setIntersect(localRemoved, remoteWords);
             for (const word of localRemoved) {
-                await api.wordsDel(this.settings, word);
+                await api.wordsDel(this.settings.options, word);
             }
 
             // words that have been removed remotely
@@ -629,25 +636,17 @@ Settings: ${JSON.stringify({ ...this.settings, username: "REDACTED", apikey: "RE
             // words that have been added locally
             const missingRemote = setDifference(localWords, remoteWords);
             for (const word of missingRemote) {
-                await api.wordsAdd(this.settings, word);
+                await api.wordsAdd(this.settings.options, word);
             }
 
             // merge remaining words
             const words = setUnion(remoteWords, localWords);
-
-            const oldLocal = new Set(this.settings.dictionary);
-            const localChanged = oldLocal.size !== words.size;
-
-            this.settings.dictionary = [...words].sort(cmpIgnoreCase);
-            this.settings.remoteDictionary = [...words].sort(cmpIgnoreCase);
-            await this.saveSettings();
-            return localChanged;
+            let dictionary = [...words].sort(cmpIgnoreCase);
+            await this.settings.update({ dictionary, remoteDictionary: dictionary });
         } catch (e) {
             this.pushLogs(e);
             new Notice(e.message, 30000);
             console.error("Failed sync spellcheck with LanguageTool", e);
         }
-        await this.saveSettings();
-        return false;
     }
 }

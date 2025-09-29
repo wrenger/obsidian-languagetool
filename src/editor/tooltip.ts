@@ -43,8 +43,8 @@ function createTooltip(
                     button.createSpan({ text: "Add to dictionary" });
                     button.onclick = async () => {
                         // Add to global dictionary
-                        plugin.settings.dictionary.push(match.text);
-                        await plugin.syncDictionary();
+                        let dictionary = [...plugin.settings.options.dictionary, match.text.trim()];
+                        await plugin.settings.update({ dictionary });
                         // Remove other underlines with the same word
                         view.dispatch({
                             effects: [
@@ -64,11 +64,11 @@ function createTooltip(
                     container.createDiv({ cls: "lt-ignore-btn" }, button => {
                         setIcon(button.createSpan(), "circle-off");
                         button.createSpan({ text: "Disable rule" });
-                        button.onclick = () => {
-                            if (plugin.settings.disabledRules)
-                                plugin.settings.disabledRules += "," + ruleId;
-                            else plugin.settings.disabledRules = ruleId;
-                            plugin.saveSettings();
+                        button.onclick = async () => {
+                            let disabledRules = plugin.settings.options.disabledRules;
+                            if (disabledRules) disabledRules += "," + ruleId;
+                            else disabledRules = ruleId;
+                            await plugin.settings.update({ disabledRules });
 
                             // Remove other underlines of the same rule
                             view.dispatch({

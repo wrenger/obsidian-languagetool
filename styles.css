@@ -16,6 +16,9 @@
 .lt-settings-grid {
     display: inline-grid;
 }
+.lt-dictionary-words {
+    display: flex;
+}
 
 .lt-menu-info {
     max-width: 200px;
