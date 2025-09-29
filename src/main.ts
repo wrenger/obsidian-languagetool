@@ -599,7 +599,8 @@ Settings: ${JSON.stringify({ ...this.settings, username: "REDACTED", apikey: "RE
     }
 
     public async onExternalSettingsChange() {
-        this.settingTab.notifyEndpointChange(this.settings.options);
+        await this.settings.load();
+        await this.settingTab.notifyEndpointChange(this.settings.options);
     }
 
     /**
