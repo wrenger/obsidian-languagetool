@@ -1,22 +1,7 @@
-import {
-    Command,
-    Editor,
-    MarkdownView,
-    Menu,
-    Notice,
-    Plugin,
-    setIcon,
-    setTooltip,
-} from "obsidian";
+import { Command, Editor, MarkdownView, Menu, Notice, Plugin, setIcon, setTooltip } from "obsidian";
 import { Decoration, EditorView } from "@codemirror/view";
 import { ChangeSpec, StateEffect } from "@codemirror/state";
-import {
-    endpointFromUrl,
-    LTOptions,
-    LTSettings,
-    LTSettingsTab,
-    SUGGESTIONS,
-} from "./settings";
+import { endpointFromUrl, LTOptions, LTSettings, LTSettingsTab, SUGGESTIONS } from "./settings";
 import * as api from "api";
 import { underlineExtension } from "./editor/extension";
 import {
@@ -89,7 +74,9 @@ export default class LanguageToolPlugin extends Plugin {
         }
 
         // Spellcheck Dictionary
-        const dictionary: Set<string> = new Set(this.settings.options.dictionary.map(w => w.trim()));
+        const dictionary: Set<string> = new Set(
+            this.settings.options.dictionary.map(w => w.trim()),
+        );
         dictionary.delete("");
         await this.settings.update({ dictionary: [...dictionary].sort(cmpIgnoreCase) });
         // Sync with language tool
@@ -121,7 +108,9 @@ export default class LanguageToolPlugin extends Plugin {
             name: "Toggle automatic checking",
             icon: "uppercase-lowercase-a",
             callback: async () => {
-                await this.settings.update({ shouldAutoCheck: !this.settings.options.shouldAutoCheck });
+                await this.settings.update({
+                    shouldAutoCheck: !this.settings.options.shouldAutoCheck,
+                });
             },
         });
         this.addCommand({
@@ -131,9 +120,7 @@ export default class LanguageToolPlugin extends Plugin {
             editorCallback: editor => {
                 // @ts-expect-error, not typed
                 const editorView = editor.cm as EditorView;
-                editorView.dispatch({
-                    effects: [clearAllUnderlines.of(null)],
-                });
+                editorView.dispatch({ effects: [clearAllUnderlines.of(null)] });
             },
         });
         this.addCommand({
@@ -207,11 +194,7 @@ export default class LanguageToolPlugin extends Plugin {
                 const editorView = editor.cm as EditorView;
                 const cursorOffset = editor.posToOffset(editor.getCursor());
 
-                const matches: {
-                    from: number;
-                    to: number;
-                    value: Decoration;
-                }[] = [];
+                const matches: { from: number; to: number; value: Decoration }[] = [];
 
                 // Get underline-matches at cursor
                 editorView.state
@@ -230,11 +213,7 @@ export default class LanguageToolPlugin extends Plugin {
 
                 // At this point, the check must have been successful.
                 const { from, to, value } = matches[0];
-                const change = {
-                    from,
-                    to,
-                    insert: value.spec.underline.replacements[n - 1],
-                };
+                const change = { from, to, insert: value.spec.underline.replacements[n - 1] };
 
                 // Insert the text of the match
                 editorView.dispatch({
@@ -262,7 +241,7 @@ export default class LanguageToolPlugin extends Plugin {
                         item.onClick(() => this.showSynonyms(editor));
                     });
                 }
-            })
+            }),
         );
     }
 
@@ -288,7 +267,12 @@ export default class LanguageToolPlugin extends Plugin {
         return populated;
     }
 
-    public populateSuggestionSubmenu(submenu: Menu, match: api.LTMatch, range: api.LTRange, editor: EditorView): void {
+    public populateSuggestionSubmenu(
+        submenu: Menu,
+        match: api.LTMatch,
+        range: api.LTRange,
+        editor: EditorView,
+    ): void {
         if (match.message || match.title) {
             submenu.addItem(item => {
                 let title = new DocumentFragment();
@@ -298,7 +282,7 @@ export default class LanguageToolPlugin extends Plugin {
                             header.createDiv({ text: match.title, cls: "lt-menu-title" });
                         if (match.message)
                             header.createDiv({ text: match.message, cls: "lt-menu-message" });
-                    })
+                    }),
                 );
                 item.setIsLabel(true);
                 item.setTitle(title);
@@ -349,8 +333,7 @@ export default class LanguageToolPlugin extends Plugin {
                     subItem.setIcon("circle-off");
                     subItem.onClick(async () => {
                         let disabledRules = this.settings.options.disabledRules;
-                        if (disabledRules)
-                            disabledRules += "," + match.ruleId;
+                        if (disabledRules) disabledRules += "," + match.ruleId;
                         else disabledRules = match.ruleId;
                         await this.settings.update({ disabledRules });
 
@@ -368,7 +351,8 @@ export default class LanguageToolPlugin extends Plugin {
     }
 
     private showSynonyms(editor: Editor, checking: boolean = false): boolean {
-        if (!this.settings.options.synonyms || !(this.settings.options.synonyms in api.SYNONYMS)) return false;
+        if (!this.settings.options.synonyms || !(this.settings.options.synonyms in api.SYNONYMS))
+            return false;
         const synonyms = api.SYNONYMS[this.settings.options.synonyms];
         if (!synonyms) return false;
 
@@ -379,7 +363,7 @@ export default class LanguageToolPlugin extends Plugin {
 
         const word = editorView.state.sliceDoc(
             editorView.state.selection.main.from,
-            editorView.state.selection.main.to
+            editorView.state.selection.main.to,
         );
         if (word.match(/[\s\.]/)) return false;
 
@@ -412,7 +396,7 @@ export default class LanguageToolPlugin extends Plugin {
                             replacements,
                         }),
                     ],
-                })
+                }),
             )
             .catch(e => {
                 console.error(e);
@@ -456,12 +440,12 @@ export default class LanguageToolPlugin extends Plugin {
                 item.setTitle(
                     this.settings.options.shouldAutoCheck
                         ? "Disable automatic checking"
-                        : "Enable automatic checking"
+                        : "Enable automatic checking",
                 );
                 item.setIcon("uppercase-lowercase-a");
                 item.onClick(async () => {
                     await this.settings.update({
-                        shouldAutoCheck: !this.settings.options.shouldAutoCheck
+                        shouldAutoCheck: !this.settings.options.shouldAutoCheck,
                     });
                 });
             })
@@ -474,15 +458,10 @@ export default class LanguageToolPlugin extends Plugin {
 
                     // @ts-expect-error, not typed
                     const editorView = view.editor.cm as EditorView;
-                    editorView.dispatch({
-                        effects: [clearAllUnderlines.of(null)],
-                    });
+                    editorView.dispatch({ effects: [clearAllUnderlines.of(null)] });
                 });
             })
-            .showAtPosition({
-                x: statusBarIconRect.right + 5,
-                y: (statusBarRect?.top || 0) - 5,
-            });
+            .showAtPosition({ x: statusBarIconRect.right + 5, y: (statusBarRect?.top || 0) - 5 });
     }
 
     /**
@@ -518,7 +497,11 @@ export default class LanguageToolPlugin extends Plugin {
     /**
      * Check the current document, adding underlines.
      */
-    public async runDetection(editor: EditorView, range?: api.LTRange): Promise<boolean> {
+    public async runDetection(
+        editor: EditorView,
+        auto: boolean = false,
+        range?: api.LTRange,
+    ): Promise<boolean> {
         let settings = this.getActiveFileSettings();
 
         const selection = editor.state.selection.main;
@@ -536,7 +519,8 @@ export default class LanguageToolPlugin extends Plugin {
             // reduce request size
             offset += annotations.optimize();
             if (annotations.length() === 0) return false;
-            if (annotations.length() > 500) longNotice = new Notice("Checking spelling...", 30000);
+            if (!auto && annotations.length() > 500)
+                longNotice = new Notice("Checking spelling...", 30000);
 
             console.info(`Checking ${annotations.length()} characters...`);
             console.debug("Text", JSON.stringify(annotations, undefined, "  "));
@@ -589,10 +573,10 @@ export default class LanguageToolPlugin extends Plugin {
      * Add an error to the log.
      */
     private async pushLogs(e: Error): Promise<void> {
-        const debugString = `${new Date().toLocaleString()}:
-Error: '${e.message}'
-Settings: ${JSON.stringify({ ...this.settings, username: "REDACTED", apikey: "REDACTED" })}
-`;
+        const debugString =
+            `${new Date().toLocaleString()}:\n` +
+            `Error: '${e.message}'\n` +
+            `Settings: ${JSON.stringify({ ...this.settings, username: "REDACTED", apikey: "REDACTED" })}\n`;
 
         this.logs.push(debugString);
         if (this.logs.length > 10) this.logs.shift();

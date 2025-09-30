@@ -3,3 +3,5 @@ main.js
 .hotreload
 data.json
 .vscode/
+.zed/
+resources/

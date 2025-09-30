@@ -4,8 +4,7 @@ import LanguageToolPlugin from "main";
 
 export function autoCheckListener(plugin: LanguageToolPlugin): Extension {
     let debounceTimer = -1;
-    let minRange = Infinity;
-    let maxRange = -Infinity;
+    let range = { from: Infinity, to: -Infinity };
 
     return EditorView.updateListener.of(update => {
         let settings = plugin.getActiveFileSettings();
@@ -15,19 +14,20 @@ export function autoCheckListener(plugin: LanguageToolPlugin): Extension {
         // One problem might be that an update comes in between starting and applying a check
 
         update.changes.iterChangedRanges((fromA, toA, fromB, toB) => {
-            minRange = Math.min(minRange, fromB, toB);
-            maxRange = Math.max(maxRange, fromB, toB);
+            range.from = Math.min(range.from, fromB, toB);
+            range.to = Math.max(range.to, fromB, toB);
         });
 
         const view = update.view;
         clearTimeout(debounceTimer);
-        debounceTimer = window.setTimeout(() => {
-            plugin.runDetection(view, { from: minRange, to: maxRange }).catch(e => {
-                console.error(e);
-            });
+        debounceTimer = window.setTimeout(async () => {
+            try {
+                await plugin.runDetection(view, true, range);
+            } catch (e) {
+                console.error("Error during auto-check:", e);
+            }
 
-            minRange = Infinity;
-            maxRange = -Infinity;
+            range = { from: Infinity, to: -Infinity };
         }, plugin.settings.options.autoCheckDelay);
     });
 }

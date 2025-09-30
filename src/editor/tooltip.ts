@@ -38,7 +38,7 @@ function createTooltip(
 
         root.createDiv({ cls: "lt-ignore-container" }, container => {
             if (category === "TYPOS") {
-                container.createEl("button", { cls: "lt-ignore-btn" }, button => {
+                container.createDiv({ cls: "lt-ignore-btn" }, button => {
                     setIcon(button.createSpan(), "plus-with-circle");
                     button.createSpan({ text: "Add to dictionary" });
                     button.onclick = async () => {

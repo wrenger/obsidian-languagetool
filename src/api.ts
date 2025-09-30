@@ -168,12 +168,7 @@ class SynonymEn implements SynonymApi {
         const word = sentence.slice(selection.from, selection.to);
 
         const request = {
-            message: {
-                indices: [index],
-                mode: 0,
-                phrases: [word],
-                text: sentence,
-            },
+            message: { indices: [index], mode: 0, phrases: [word], text: sentence },
             meta: {
                 clientStatus: "string",
                 product: "string",
@@ -188,9 +183,7 @@ class SynonymEn implements SynonymApi {
                 await requestUrlChecked({
                     url: this.url,
                     method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
+                    headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(request),
                 })
             ).json;
@@ -233,7 +226,7 @@ async function requestUrlChecked(request: RequestUrlParam): Promise<RequestUrlRe
         response = await requestUrl({ ...request, throw: false });
     } catch (e) {
         throw new Error(
-            `Request to LanguageTool failed: Please check your connection and server URL.\n${e}`
+            `Request to LanguageTool failed: Please check your connection and server URL.\n${e}`,
         );
     }
     if (response.status === 504 || response.status === 503)
@@ -253,7 +246,7 @@ function jsonPath<T>(path: string, json: string | number | boolean | object | ob
 }
 function jsonPathA<T>(
     path: string,
-    json: string | number | boolean | object | object[] | null
+    json: string | number | boolean | object | object[] | null,
 ): T[] {
     const res = JSONPath({ path: path, json: json, wrap: true, eval: false });
     if (res == null || !(res instanceof Array)) throw new Error(`Error parsing response.`);

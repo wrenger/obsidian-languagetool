@@ -107,12 +107,7 @@ export const DEFAULT_SETTINGS: LTOptions = {
     serverUrl: endpoints["standard"].url,
     autoCheckDelay: endpoints.standard.minDelay,
     shouldAutoCheck: false,
-    languageVariety: {
-        en: "en-US",
-        de: "de-DE",
-        pt: "pt-PT",
-        ca: "ca-ES",
-    },
+    languageVariety: { en: "en-US", de: "de-DE", pt: "pt-PT", ca: "ca-ES" },
     dictionary: [],
     syncDictionary: false,
     remoteDictionary: [],
@@ -147,13 +142,13 @@ export class LTSettingsTab extends PluginSettingTab {
             autoCheckDelay: Math.clamp(
                 this.plugin.settings.options.autoCheckDelay,
                 minAutoCheckDelay,
-                autoCheckDelayMax
-            )
+                autoCheckDelayMax,
+            ),
         });
         slider.setLimits(minAutoCheckDelay, autoCheckDelayMax, autoCheckDelayStep);
     }
 
-    public async notifyEndpointChange(settings: LTOptions): Promise<void> {
+    public async notifyEndpointChange(settings: Readonly<LTOptions>): Promise<void> {
         for (const listener of this.endpointListeners) {
             await listener(settings.serverUrl);
         }
@@ -161,7 +156,7 @@ export class LTSettingsTab extends PluginSettingTab {
 
     private async configureLanguageVariants(
         dropdown: DropdownComponent,
-        code: string
+        code: string,
     ): Promise<void> {
         const languageVariety = this.plugin.settings.options.languageVariety;
         const variants = languageVariants(this.languages, code);
@@ -220,6 +215,9 @@ export class LTSettingsTab extends PluginSettingTab {
         let endpoint = endpointFromUrl(settings.options.serverUrl);
         let autoCheckDelaySlider: SliderComponent | null = null;
 
+        let endpointTimer: number | null = null;
+        let endpointNotice: Notice | null = null;
+
         new Setting(containerEl)
             .setName("Endpoint")
             .setDesc("Choose the LanguageTool server url")
@@ -242,7 +240,9 @@ export class LTSettingsTab extends PluginSettingTab {
                             await settings.update({ serverUrl: endpoints[endpoint].url });
 
                             if (input)
-                                input.setValue(settings.options.serverUrl).setDisabled(value !== "custom");
+                                input
+                                    .setValue(settings.options.serverUrl)
+                                    .setDisabled(value !== "custom");
 
                             if (autoCheckDelaySlider)
                                 this.configureCheckDelay(autoCheckDelaySlider, endpoint);
@@ -252,14 +252,12 @@ export class LTSettingsTab extends PluginSettingTab {
                 });
                 setting.addText(text => {
                     input = text;
-                    text.setPlaceholder("https://your-custom-url.com")
+                    text.setPlaceholder("http://your-custom-url.com")
                         .setValue(settings.options.serverUrl)
                         .setDisabled(endpoint !== "custom")
                         .onChange(async value => {
                             await settings.update({
-                                serverUrl: value
-                                    .replace(/\/v2\/check\/$/, "")
-                                    .replace(/\/$/, "")
+                                serverUrl: value.replace(/\/v2\/check\/$/, "").replace(/\/$/, ""),
                             });
 
                             endpoint = endpointFromUrl(settings.options.serverUrl);
@@ -268,7 +266,23 @@ export class LTSettingsTab extends PluginSettingTab {
                                 input?.setDisabled(true);
                             }
 
-                            await this.notifyEndpointChange(settings.options);
+                            if (endpointTimer) window.clearTimeout(endpointTimer);
+                            endpointTimer = window.setTimeout(async () => {
+                                try {
+                                    await this.notifyEndpointChange(settings.options);
+                                    if (endpointNotice) endpointNotice.hide();
+                                    endpointNotice = new Notice(
+                                        "Successfully contacted LanguageTool server.",
+                                        3000,
+                                    );
+                                } catch (error) {
+                                    if (endpointNotice) endpointNotice.hide();
+                                    endpointNotice = new Notice(
+                                        `Error contacting LanguageTool server:\n${error.message}`,
+                                        3000,
+                                    );
+                                }
+                            }, 600);
                         });
                 });
             });
@@ -282,7 +296,7 @@ export class LTSettingsTab extends PluginSettingTab {
                     .setValue(settings.options.username || "")
                     .onChange(async value => {
                         await settings.update({ username: value.replace(/\s+/g, "") });
-                    })
+                    }),
             );
         new Setting(containerEl)
             .setName("API key")
@@ -293,17 +307,17 @@ export class LTSettingsTab extends PluginSettingTab {
                         href: "https://github.com/wrenger/obsidian-languagetool#premium-accounts",
                         attr: { target: "_blank" },
                     });
-                })
+                }),
             )
             .addText(text =>
                 text.setValue(settings.options.apikey || "").onChange(async value => {
                     await settings.update({ apikey: value.replace(/\s+/g, "") });
                     if (settings.options.apikey && endpoint !== "premium") {
                         new Notice(
-                            "You have entered an API Key but you are not using the Premium Endpoint"
+                            "You have entered an API Key but you are not using the Premium Endpoint",
                         );
                     }
-                })
+                }),
             );
         new Setting(containerEl)
             .setName("Auto check text")
@@ -366,7 +380,8 @@ export class LTSettingsTab extends PluginSettingTab {
         new Setting(containerEl)
             .setName("Mother tongue")
             .setDesc(
-                "Set mother tongue if you want to be warned about false friends when writing in other languages. This setting will also be used for automatic language detection."
+                "Set mother tongue if you want to be warned about false friends when writing in other languages. " +
+                    "This setting will also be used for automatic language detection.",
             )
             .addDropdown(component => {
                 this.languageListeners.push(async languages => {
@@ -382,12 +397,14 @@ export class LTSettingsTab extends PluginSettingTab {
                                 // only languages that are not dialects
                                 languages
                                     .filter(v => v.longCode == v.code)
-                                    .map(v => [v.longCode, v.name])
-                            )
+                                    .map(v => [v.longCode, v.name]),
+                            ),
                         )
                         .setValue(settings.options.motherTongue ?? "none")
                         .onChange(async value => {
-                            await settings.update({ motherTongue: value !== "none" ? value : undefined });
+                            await settings.update({
+                                motherTongue: value !== "none" ? value : undefined,
+                            });
                         });
                 });
             });
@@ -395,7 +412,8 @@ export class LTSettingsTab extends PluginSettingTab {
         new Setting(containerEl)
             .setName("Static language")
             .setDesc(
-                "Set a static language that will always be used (LanguageTool tries to auto detect the language, this is usually not necessary)"
+                "Set a static language that will always be used" +
+                    "(LanguageTool tries to auto detect the language, this is usually not necessary)",
             )
             .addDropdown(component => {
                 this.languageListeners.push(async languages => {
@@ -407,7 +425,7 @@ export class LTSettingsTab extends PluginSettingTab {
                         v =>
                             v.longCode.length > 2 ||
                             v.longCode !== v.code ||
-                            languages.filter(l => l.code == v.code).length <= 1
+                            languages.filter(l => l.code == v.code).length <= 1,
                     );
 
                     // Clear options
@@ -420,7 +438,9 @@ export class LTSettingsTab extends PluginSettingTab {
                         .addOptions(Object.fromEntries(staticLang.map(v => [v.longCode, v.name])))
                         .setValue(settings.options.staticLanguage ?? "auto")
                         .onChange(async value => {
-                            await settings.update({ staticLanguage: value !== "auto" ? value : undefined });
+                            await settings.update({
+                                staticLanguage: value !== "auto" ? value : undefined,
+                            });
                         });
                 });
             });
@@ -430,12 +450,7 @@ export class LTSettingsTab extends PluginSettingTab {
             .setHeading()
             .setDesc("Some languages have varieties depending on the country they are spoken in.");
 
-        const langVariants = {
-            en: "English",
-            de: "German",
-            pt: "Portuguese",
-            ca: "Catalan",
-        };
+        const langVariants = { en: "English", de: "German", pt: "Portuguese", ca: "Catalan" };
         for (const [id, lang] of Object.entries(langVariants)) {
             new Setting(containerEl)
                 .setName(`Interpret ${lang} as`)
@@ -486,7 +501,8 @@ export class LTSettingsTab extends PluginSettingTab {
             .setDesc(
                 createFragment(frag => {
                     frag.appendText(
-                        "The picky mode enables a lot of extra categories and rules. Additionally, you can enable or disable specific rules down below."
+                        "The picky mode enables a lot of extra categories and rules. " +
+                            "Additionally, you can enable or disable specific rules down below.",
                     );
                     frag.createEl("br");
                     frag.createEl("a", {
@@ -494,13 +510,16 @@ export class LTSettingsTab extends PluginSettingTab {
                         href: "https://community.languagetool.org/rule/list",
                         attr: { target: "_blank" },
                     });
-                })
+                }),
             );
 
         new Setting(containerEl)
             .setName("Picky mode")
             .setDesc(
-                "Provides more style and tonality suggestions, detects long or complex sentences, recognizes colloquialism and redundancies, proactively suggests synonyms for commonly overused words"
+                "Provides more style and tonality suggestions, " +
+                    "detects long or complex sentences, " +
+                    "recognizes colloquialism and redundancies, " +
+                    "proactively suggests synonyms for commonly overused words",
             )
             .addToggle(component => {
                 component.setValue(settings.options.pickyMode).onChange(async value => {
@@ -517,7 +536,7 @@ export class LTSettingsTab extends PluginSettingTab {
                     .setValue(settings.options.enabledCategories ?? "")
                     .onChange(async value => {
                         await settings.update({ enabledCategories: value.replace(/\s+/g, "") });
-                    })
+                    }),
             );
 
         new Setting(containerEl)
@@ -529,7 +548,7 @@ export class LTSettingsTab extends PluginSettingTab {
                     .setValue(settings.options.disabledCategories ?? "")
                     .onChange(async value => {
                         await settings.update({ disabledCategories: value.replace(/\s+/g, "") });
-                    })
+                    }),
             );
 
         new Setting(containerEl)
@@ -541,7 +560,7 @@ export class LTSettingsTab extends PluginSettingTab {
                     .setValue(settings.options.enabledRules ?? "")
                     .onChange(async value => {
                         await settings.update({ enabledRules: value.replace(/\s+/g, "") });
-                    })
+                    }),
             );
 
         new Setting(containerEl)
@@ -553,7 +572,7 @@ export class LTSettingsTab extends PluginSettingTab {
                     .setValue(settings.options.disabledRules ?? "")
                     .onChange(async value => {
                         await settings.update({ disabledRules: value.replace(/\s+/g, "") });
-                    })
+                    }),
             );
 
         await this.notifyEndpointChange(settings.options);
@@ -579,8 +598,8 @@ export class DictionaryModal extends Modal {
             container.replaceChildren(
                 ...this.words.map(word =>
                     container.createDiv({ cls: "multi-select-pill" }, pill => {
-                        pill.createDiv({ cls: "multi-select-pill-content" }, pill =>
-                            pill.createSpan({ text: word })
+                        pill.createDiv({ cls: "multi-select-pill-content" }, content =>
+                            content.createSpan({ text: word }),
                         );
                         pill.createDiv({ cls: "multi-select-pill-remove-button" }, remove => {
                             remove.appendChild(getIcon("x")!);
@@ -589,16 +608,19 @@ export class DictionaryModal extends Modal {
                                 createButtons(container);
                             });
                         });
-                    })
-                )
+                    }),
+                ),
             );
         };
 
         let buttonContainer: null | HTMLDivElement = null;
-        contentEl.createDiv({ cls: ["multi-select-container", "lt-dictionary-words"] }, container => {
-            buttonContainer = container;
-            createButtons(container);
-        });
+        contentEl.createDiv(
+            { cls: ["multi-select-container", "lt-dictionary-words"] },
+            container => {
+                buttonContainer = container;
+                createButtons(container);
+            },
+        );
 
         this.plugin.syncDictionary().then(() => {
             this.words = this.plugin.settings.options.dictionary;
