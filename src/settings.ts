@@ -396,7 +396,7 @@ export class LTSettingsTab extends PluginSettingTab {
                             Object.fromEntries(
                                 // only languages that are not dialects
                                 languages
-                                    .filter(v => v.longCode == v.code)
+                                    .filter(v => v.longCode === v.code || v.longCode.startsWith(v.code + "-"))
                                     .map(v => [v.longCode, v.name]),
                             ),
                         )
