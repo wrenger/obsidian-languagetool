@@ -19,6 +19,30 @@ const autoCheckDelayStep = 250;
 
 export const SUGGESTIONS = 8;
 
+/**
+ * Unfortunately LanguageTool API does not provide a list of supported mother tongues,
+ * so we hardcode the ones from https://languagetool.org/editor/settings/language.
+ */
+export const MOTHER_TONGUES: Record<string, string> = {
+    "ar": "Arabic",
+    "ca": "Catalan",
+    "da": "Danish",
+    "de": "German",
+    "en": "English",
+    "es": "Spanish",
+    "fr": "French",
+    "gl": "Galician",
+    "it": "Italian",
+    "ja": "Japanese",
+    "nl": "Dutch",
+    "pl": "Polish",
+    "pt": "Portuguese",
+    "ru": "Russian",
+    "sv": "Swedish",
+    "uk": "Ukrainian",
+    "zh": "Chinese",
+};
+
 export class Endpoint {
     url: string;
     requestsPerSec: number;
@@ -384,29 +408,15 @@ export class LTSettingsTab extends PluginSettingTab {
                     "This setting will also be used for automatic language detection.",
             )
             .addDropdown(component => {
-                this.languageListeners.push(async languages => {
-                    // Clear options
-                    while (component.selectEl.options.length > 0) {
-                        component.selectEl.remove(0);
-                    }
-
-                    component
-                        .addOption("none", "---")
-                        .addOptions(
-                            Object.fromEntries(
-                                // only languages that are not dialects
-                                languages
-                                    .filter(v => v.longCode == v.code)
-                                    .map(v => [v.longCode, v.name]),
-                            ),
-                        )
-                        .setValue(settings.options.motherTongue ?? "none")
-                        .onChange(async value => {
-                            await settings.update({
-                                motherTongue: value !== "none" ? value : undefined,
-                            });
+                component
+                    .addOption("none", "---")
+                    .addOptions(MOTHER_TONGUES)
+                    .setValue(settings.options.motherTongue ?? "none")
+                    .onChange(async value => {
+                        await settings.update({
+                            motherTongue: value !== "none" ? value : undefined,
                         });
-                });
+                    });
             });
 
         new Setting(containerEl)
