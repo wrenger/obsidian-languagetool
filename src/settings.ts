@@ -125,6 +125,8 @@ export interface LTOptions {
     disabledCategories?: string;
     enabledRules?: string;
     disabledRules?: string;
+
+    longCheckNotification: boolean
 }
 
 export const DEFAULT_SETTINGS: LTOptions = {
@@ -136,6 +138,7 @@ export const DEFAULT_SETTINGS: LTOptions = {
     syncDictionary: false,
     remoteDictionary: [],
     pickyMode: false,
+    longCheckNotification: true,
 };
 
 interface EndpointListener {
@@ -405,7 +408,7 @@ export class LTSettingsTab extends PluginSettingTab {
             .setName("Mother tongue")
             .setDesc(
                 "Set mother tongue if you want to be warned about false friends when writing in other languages. " +
-                    "This setting will also be used for automatic language detection.",
+                "This setting will also be used for automatic language detection.",
             )
             .addDropdown(component => {
                 component
@@ -423,7 +426,7 @@ export class LTSettingsTab extends PluginSettingTab {
             .setName("Static language")
             .setDesc(
                 "Set a static language that will always be used" +
-                    "(LanguageTool tries to auto detect the language, this is usually not necessary)",
+                "(LanguageTool tries to auto detect the language, this is usually not necessary)",
             )
             .addDropdown(component => {
                 this.languageListeners.push(async languages => {
@@ -512,7 +515,7 @@ export class LTSettingsTab extends PluginSettingTab {
                 createFragment(frag => {
                     frag.appendText(
                         "The picky mode enables a lot of extra categories and rules. " +
-                            "Additionally, you can enable or disable specific rules down below.",
+                        "Additionally, you can enable or disable specific rules down below.",
                     );
                     frag.createEl("br");
                     frag.createEl("a", {
@@ -527,9 +530,9 @@ export class LTSettingsTab extends PluginSettingTab {
             .setName("Picky mode")
             .setDesc(
                 "Provides more style and tonality suggestions, " +
-                    "detects long or complex sentences, " +
-                    "recognizes colloquialism and redundancies, " +
-                    "proactively suggests synonyms for commonly overused words",
+                "detects long or complex sentences, " +
+                "recognizes colloquialism and redundancies, " +
+                "proactively suggests synonyms for commonly overused words",
             )
             .addToggle(component => {
                 component.setValue(settings.options.pickyMode).onChange(async value => {
@@ -584,6 +587,24 @@ export class LTSettingsTab extends PluginSettingTab {
                         await settings.update({ disabledRules: value.replace(/\s+/g, "") });
                     }),
             );
+
+
+
+        // ---------------------------------------------------------------------
+        // Advanced
+        // ---------------------------------------------------------------------
+        new Setting(containerEl).setName("Advanced").setHeading();
+
+        new Setting(containerEl)
+            .setName("Long check notification")
+            .setDesc("Show the 'Check spelling...' notification when a manual check is taking a long time")
+            .addToggle(component => {
+                component
+                    .setValue(settings.options.longCheckNotification)
+                    .onChange(async value => {
+                        await settings.update({ longCheckNotification: value });
+                    });
+            });
 
         await this.notifyEndpointChange(settings.options);
     }

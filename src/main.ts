@@ -520,7 +520,7 @@ export default class LanguageToolPlugin extends Plugin {
             offset += annotations.optimize();
             if (annotations.length() === 0) return false;
             // Notification for mobile devices, that do not have the status bar indicator
-            if (Platform.isMobile && !auto && annotations.length() > 500)
+            if (settings.longCheckNotification && !auto && annotations.length() > 500)
                 longNotice = new Notice("Checking spelling...", 30000);
 
             console.info(`Checking ${annotations.length()} characters...`);
