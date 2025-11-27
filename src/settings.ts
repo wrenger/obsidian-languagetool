@@ -215,6 +215,9 @@ export class LTSettingsTab extends PluginSettingTab {
 
         const settings = this.plugin.settings;
 
+        // Reset auto-check errors assuming the user fixes the issue
+        this.plugin.autoCheckSuppressErrorsUntil = 0;
+
         this.endpointListeners = [];
         this.endpointListeners.push(async url => {
             let lang: api.Language[] = [];

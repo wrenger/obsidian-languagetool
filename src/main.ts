@@ -38,6 +38,9 @@ export default class LanguageToolPlugin extends Plugin {
     public logs: string[] = [];
     private settingTab: LTSettingsTab;
 
+    // Used to temporarily disable auto-checking errors
+    public autoCheckSuppressErrorsUntil: number = 0;
+
     public async onload(): Promise<void> {
         // Settings
         await this.settings.load();
@@ -533,8 +536,9 @@ export default class LanguageToolPlugin extends Plugin {
             console.error(e);
             if (e instanceof Error) {
                 this.pushLogs(e);
-                new Notice(e.message, 30000);
+                if (!auto) new Notice(e.message, 30000);
             }
+            if (auto) throw e; // re-throw for auto-checks
             return true;
         } finally {
             this.setStatusBarReady();
@@ -567,6 +571,8 @@ export default class LanguageToolPlugin extends Plugin {
             editor.dispatch({ effects });
         }
         console.info(`Found ${effects.length - 1} suggestions.`);
+        // reset auto-check disable on successful check
+        this.autoCheckSuppressErrorsUntil = 0;
         return effects.length > 1;
     }
 

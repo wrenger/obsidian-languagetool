@@ -1,6 +1,7 @@
 import { Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import LanguageToolPlugin from "main";
+import { Notice } from "obsidian";
 
 export function autoCheckListener(plugin: LanguageToolPlugin): Extension {
     let debounceTimer = -1;
@@ -24,7 +25,12 @@ export function autoCheckListener(plugin: LanguageToolPlugin): Extension {
             try {
                 await plugin.runDetection(view, true, range);
             } catch (e) {
-                console.error("Error during auto-check:", e);
+                if (Date.now() > plugin.autoCheckSuppressErrorsUntil) {
+                    // Prevent spamming errors
+                    plugin.autoCheckSuppressErrorsUntil = Date.now() + 15 * 60_000; // 15 minutes
+                    new Notice("Auto-check failed:\n" + e.message, 10000);
+                }
+                console.error("Auto-check failed", e);
             }
 
             range = { from: Infinity, to: -Infinity };
