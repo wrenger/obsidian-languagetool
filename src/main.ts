@@ -1,4 +1,4 @@
-import { Command, Editor, MarkdownView, Menu, Notice, Plugin, setIcon, setTooltip } from "obsidian";
+import { Command, Editor, MarkdownView, Menu, Notice, Platform, Plugin, setIcon, setTooltip } from "obsidian";
 import { Decoration, EditorView } from "@codemirror/view";
 import { ChangeSpec, StateEffect } from "@codemirror/state";
 import { endpointFromUrl, LTOptions, LTSettings, LTSettingsTab, SUGGESTIONS } from "./settings";
@@ -519,7 +519,8 @@ export default class LanguageToolPlugin extends Plugin {
             // reduce request size
             offset += annotations.optimize();
             if (annotations.length() === 0) return false;
-            if (!auto && annotations.length() > 500)
+            // Notification for mobile devices, that do not have the status bar indicator
+            if (Platform.isMobile && !auto && annotations.length() > 500)
                 longNotice = new Notice("Checking spelling...", 30000);
 
             console.info(`Checking ${annotations.length()} characters...`);
