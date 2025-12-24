@@ -1,5 +1,5 @@
-import { EditorView, Tooltip, hoverTooltip } from "@codemirror/view";
-import { Extension } from "@codemirror/state";
+import { EditorView, Tooltip, hoverTooltip, showTooltip } from "@codemirror/view";
+import { Extension, StateField } from "@codemirror/state";
 import { categoryCssClass } from "../helpers";
 import { ButtonComponent, setIcon } from "obsidian";
 import { default as LanguageToolPlugin } from "main";
@@ -106,6 +106,10 @@ function lintTooltip(plugin: LanguageToolPlugin, view: EditorView, pos: number, 
 
     let cursor = underlines.iter(pos);
     if (cursor.value != null && cursor.from <= pos && cursor.to >= pos) {
+        // if cursor is on same position return to avoid duplicate tooltips
+        const selection = state.selection.main;
+        if (selection.from <= cursor.to && selection.to >= cursor.from) return null;
+
         let match = cursor.value.spec.underline as api.LTMatch;
         return {
             pos: cursor.from,
@@ -128,8 +132,45 @@ export function buildHoverTooltip(plugin: LanguageToolPlugin): Extension {
     });
 }
 
-export const baseTheme = EditorView.baseTheme({
-    ".cm-tooltip.cm-tooltip-hover": {
+export const buildCursorTooltip = (plugin: LanguageToolPlugin) => StateField.define<Tooltip | null>({
+    create: () => null,
+    update(tooltip, tr) {
+        // Only update if selection or document changed to avoid flickering
+        if (!tr.docChanged && !tr.selection) return tooltip;
+
+        const state = tr.state;
+        const selection = state.selection.main;
+        const pos = selection.head;
+
+        const underlines = state.field(underlineDecoration);
+        if (underlines.size === 0) return null;
+
+        let cursor = underlines.iter(pos);
+        if (cursor.value != null && cursor.from <= pos && cursor.to >= pos) {
+            let match = cursor.value.spec.underline as api.LTMatch;
+
+            return {
+                pos: cursor.from,
+                end: cursor.to,
+                above: true,
+                strictSide: false,
+                arrow: false,
+                clip: false,
+                create: (view) => {
+                    const dom = createTooltip(plugin, view, match, { from: cursor.from, to: cursor.to });
+                    dom.classList.add("cm-tooltip-hover"); // Add to hover class for same styling
+                    return { dom };
+                },
+            };
+        }
+
+        return null;
+    },
+    provide: (f) => showTooltip.from(f),
+});
+
+    export const baseTheme = EditorView.baseTheme({
+    ".cm-tooltip.cm-tooltip-hover, .cm-tooltip:has(.lt-tooltip)": {
         padding: "var(--size-2-3)",
         border: "1px solid var(--background-modifier-border-hover)",
         backgroundColor: "var(--background-secondary)",
@@ -138,75 +179,76 @@ export const baseTheme = EditorView.baseTheme({
         zIndex: "var(--layer-menu)",
         userSelect: "none",
         overflow: "hidden",
-        "& > .lt-tooltip": {
-            fontFamily: "var(--default-font)",
-            fontSize: "var(--font-ui-small)",
-            width: "300px",
-            lineHeight: 1.5,
-            "& > .lt-title": {
-                display: "block",
-                fontWeight: 600,
-                marginBottom: "6px",
-                padding: "0 12px",
-                textDecoration: "underline 2px var(--lt-highlight)",
-                "-webkit-text-decoration": "underline 2px var(--lt-highlight)",
-            },
-            "& > .lt-message": {
-                display: "block",
-                padding: "0 12px",
-            },
-            "& > .lt-bottom": {
-                minHeight: "10px",
-                padding: "0 12px",
-                position: "relative",
-                "& > .lt-buttoncontainer": {
-                    "&:not(:empty)": {
-                        paddingTop: "10px",
-                    },
-                    "& > button": {
-                        marginRight: "4px",
-                        marginBottom: "4px",
-                        padding: "4px 6px",
-                    }
-                }
-            },
-            "& > .lt-ignore-container": {
-                display: "flex",
-                "& > .lt-ignore-btn": {
-                    fontSize: "var(--font-ui-small)",
-                    padding: "4px",
-                    display: "flex",
-                    flex: 1,
-                    width: "100%",
-                    textAlign: "left",
-                    alignItems: "center",
-                    lineHeight: 1,
-                    color: "var(--text-muted)",
-                    "& > span": {
-                        display: "flex",
-                        "&:last-child": {
-                            marginLeft: "5px",
-                        }
-                    },
-                    "&:hover": {
-                        color: "var(--text-normal)",
-                    }
+    },
+    ".lt-tooltip": {
+        fontFamily: "var(--default-font)",
+        fontSize: "var(--font-ui-small)",
+        width: "300px",
+        lineHeight: 1.5,
+
+        "& > .lt-title": {
+            display: "block",
+            fontWeight: 600,
+            marginBottom: "6px",
+            padding: "0 12px",
+            textDecoration: "underline 2px var(--lt-highlight)",
+            "-webkit-text-decoration": "underline 2px var(--lt-highlight)",
+        },
+        "& > .lt-message": {
+            display: "block",
+            padding: "0 12px",
+        },
+        "& > .lt-bottom": {
+            minHeight: "10px",
+            padding: "0 12px",
+            position: "relative",
+            "& > .lt-buttoncontainer": {
+                "&:not(:empty)": {
+                    paddingTop: "10px",
                 },
-                "& > .lt-info-container": {
-                    display: "flex",
-                    flex: 0,
-                    "& > .lt-info-button": {
-                        color: "var(--text-faint)",
-                        height: "100%",
-                    }
+                "& > button": {
+                    marginRight: "4px",
+                    marginBottom: "4px",
+                    padding: "4px 6px",
                 }
-            },
-            "& > .lt-info-box": {
-                padding: "5px 0px 0px 0px",
-                overflowX: "scroll",
-                color: "var(--text-muted)",
             }
         },
+        "& > .lt-ignore-container": {
+            display: "flex",
+            "& > .lt-ignore-btn": {
+                fontSize: "var(--font-ui-small)",
+                padding: "4px",
+                display: "flex",
+                flex: 1,
+                width: "100%",
+                textAlign: "left",
+                alignItems: "center",
+                lineHeight: 1,
+                color: "var(--text-muted)",
+                "& > span": {
+                    display: "flex",
+                    "&:last-child": {
+                        marginLeft: "5px",
+                    }
+                },
+                "&:hover": {
+                    color: "var(--text-normal)",
+                }
+            },
+            "& > .lt-info-container": {
+                display: "flex",
+                flex: 0,
+                "& > .lt-info-button": {
+                    color: "var(--text-faint)",
+                    height: "100%",
+                }
+            }
+        },
+        "& > .lt-info-box": {
+            padding: "5px 0px 0px 0px",
+            overflowX: "scroll",
+            color: "var(--text-muted)",
+        }
     },
     ".lt-underline": {
         cursor: "pointer",
