@@ -1,16 +1,10 @@
-import { Command, Editor, MarkdownView, Menu, Notice, Platform, Plugin, setIcon, setTooltip } from "obsidian";
+import { Command, Editor, MarkdownView, Menu, Notice, Plugin, setIcon, setTooltip } from "obsidian";
 import { Decoration, EditorView } from "@codemirror/view";
 import { ChangeSpec, StateEffect } from "@codemirror/state";
 import { endpointFromUrl, LTOptions, LTSettings, LTSettingsTab, SUGGESTIONS } from "./settings";
 import * as api from "api";
 import { underlineExtension } from "./editor/extension";
-import {
-    addUnderline,
-    clearAllUnderlines,
-    clearMatchingUnderlines,
-    clearUnderlinesInRange,
-    underlineDecoration,
-} from "./editor/underlines";
+import { addUnderline, clearAllUnderlines, clearMatchingUnderlines, clearUnderlinesInRange, underlineDecoration } from "./editor/underlines";
 import { cmpIgnoreCase, setDifference, setIntersect, setUnion } from "./helpers";
 import * as markdown from "./markdown/parser";
 

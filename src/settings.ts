@@ -5,6 +5,7 @@ import {
     Modal,
     Notice,
     PluginSettingTab,
+    requireApiVersion,
     Setting,
     SliderComponent,
     TextComponent,
@@ -162,6 +163,10 @@ export class LTSettingsTab extends PluginSettingTab {
 
     public constructor(app: App, plugin: LanguageToolPlugin) {
         super(app, plugin);
+        if (requireApiVersion("1.11.0")) {
+            let tab = this as any;
+            tab.icon = "spell-check";
+        }
         this.plugin = plugin;
     }
 
