@@ -63,18 +63,8 @@ export default class LanguageToolPlugin extends Plugin {
         this.registerMenuItems();
 
         // Configure frontmatter suggestions
-        try {
-            // WARNING: Internal API
-            let typeManager = (this.app as any).metadataTypeManager;
-            typeManager.setType("lt-language", "text");
-            typeManager.setType("lt-picky", "checkbox");
-            typeManager.setType("lt-autoCheck", "checkbox");
-            typeManager.setType("lt-dictionary", "multitext");
-            typeManager.setType("lt-disabledRules", "multitext");
-            typeManager.setType("lt-disabledCategories", "multitext");
-        } catch {
-            console.error("Failed to set metadata types");
-        }
+        if (this.settings.options.injectProperties)
+            this.injectProperties(true);
 
         // Spellcheck Dictionary
         const dictionary: Set<string> = new Set(
@@ -89,6 +79,28 @@ export default class LanguageToolPlugin extends Plugin {
     public onunload() {
         this.logs = [];
         this.isLoading = false;
+    }
+
+    // Configure frontmatter suggestions
+    public injectProperties(inject: boolean) {
+        const properties = {
+            "lt-language": "text",
+            "lt-picky": "checkbox",
+            "lt-autoCheck": "checkbox",
+            "lt-dictionary": "multitext",
+            "lt-disabledRules": "multitext",
+            "lt-disabledCategories": "multitext",
+        };
+        try {
+            // WARNING: Internal API
+            let typeManager = (this.app as any).metadataTypeManager;
+            for (const [key, type] of Object.entries(properties)) {
+                if (inject) typeManager.setType(key, type);
+                else typeManager.unsetType(key);
+            }
+        } catch {
+            console.error("Failed to set metadata types");
+        }
     }
 
     private registerCommands() {

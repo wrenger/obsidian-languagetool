@@ -126,7 +126,8 @@ export interface LTOptions {
     enabledRules?: string;
     disabledRules?: string;
 
-    longCheckNotification: boolean
+    longCheckNotification: boolean,
+    injectProperties: boolean,
 }
 
 export const DEFAULT_SETTINGS: LTOptions = {
@@ -139,6 +140,7 @@ export const DEFAULT_SETTINGS: LTOptions = {
     remoteDictionary: [],
     pickyMode: false,
     longCheckNotification: true,
+    injectProperties: true,
 };
 
 interface EndpointListener {
@@ -606,6 +608,18 @@ export class LTSettingsTab extends PluginSettingTab {
                     .setValue(settings.options.longCheckNotification)
                     .onChange(async value => {
                         await settings.update({ longCheckNotification: value });
+                    });
+            });
+
+        new Setting(containerEl)
+            .setName("Inject property types")
+            .setDesc("Define the properties for note-specific LanguageTool settings.")
+            .addToggle(component => {
+                component
+                    .setValue(settings.options.injectProperties)
+                    .onChange(async value => {
+                        await settings.update({ injectProperties: value });
+                        this.plugin.injectProperties(value);
                     });
             });
 
