@@ -11,7 +11,7 @@ import { wikiLink } from "./micromark-wikilink";
 import { wikiLinkFromMarkdown } from "./mdast-wikilink";
 import * as api from "../api";
 
-const ESCAPE = /\\[!"#$%&'()*+,\-.\/:;<=>?@\[\\\]^_`{|}~]/g;
+const ESCAPE = /\\[!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~]/g;
 
 export class SyntaxTree {
     #raw: string;
@@ -236,6 +236,7 @@ function addText(text: string, output: AnnotatedText) {
 
 function addLines(text: string, parsed: string, output: AnnotatedText) {
     const [first, ...reminder] = text.replace(/\n$/, "").split("\n");
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [pfirst, ...premider] = parsed.replace(/\n$/, "").split("\n");
 
     if (reminder.length !== premider.length) {
@@ -250,6 +251,7 @@ function addLines(text: string, parsed: string, output: AnnotatedText) {
         const pline = premider[i];
 
         let indent = line.length - pline.length;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         for (const m of line.matchAll(ESCAPE)) {
             indent -= 1; // each escape character is one longer
         }

@@ -24,7 +24,7 @@ class LTPluginSettings extends LTSettings {
         return this.plugin.loadData();
     }
     protected save(options: LTOptions): Promise<void> {
-        console.info("Saving settings", options);
+        console.debug("Saving settings", options);
         return this.plugin.saveData(options);
     }
 }
@@ -92,7 +92,14 @@ export default class LanguageToolPlugin extends Plugin {
         };
         try {
             // WARNING: Internal API
-            let typeManager = (this.app as any).metadataTypeManager;
+            type MetadataTypeManager = {
+                setType: (key: string, type: string) => void;
+                unsetType: (key: string) => void;
+            };
+            // @ts-expect-error, not typed
+            let typeManager = (this.app as {
+                metadataTypeManager: MetadataTypeManager;
+            }).metadataTypeManager;
             for (const [key, type] of Object.entries(properties)) {
                 if (inject) typeManager.setType(key, type);
                 else typeManager.unsetType(key);
@@ -110,11 +117,12 @@ export default class LanguageToolPlugin extends Plugin {
             editorCallback: (editor, view) => {
                 // @ts-expect-error, not typed
                 const editorView = editor.cm as EditorView;
-                this.runDetection(editorView)
-                    .catch(e => console.error(e))
-                    .then(suggestions => {
+                this.runDetection(editorView).then(
+                    suggestions => {
                         if (!suggestions) new Notice("No suggestions found.");
-                    });
+                    },
+                    e => console.error(e),
+                );
             },
         });
         this.addCommand({
@@ -149,12 +157,9 @@ export default class LanguageToolPlugin extends Plugin {
                 editorView.state
                     .field(underlineDecoration)
                     .between(0, Infinity, (from, to, value) => {
-                        if (value.spec?.underline?.replacements?.length) {
-                            changes.push({
-                                from,
-                                to,
-                                insert: value.spec.underline.replacements[0],
-                            });
+                        let underline = (value.spec as { underline?: api.LTLint }).underline;
+                        if (underline?.replacements?.length) {
+                            changes.push({ from, to, insert: underline.replacements[0] });
                             effects.push(clearUnderlinesInRange.of({ from, to }));
                         }
                     });
@@ -218,16 +223,17 @@ export default class LanguageToolPlugin extends Plugin {
                     });
 
                 // Check that there is exactly one match that has a replacement in the slot that is called.
-                const preconditions =
-                    matches.length === 1 &&
-                    matches[0].value.spec?.underline?.replacements?.length >= n;
+                if (!matches || matches.length !== 1) return false;
+                const { from, to, value } = matches[0];
+
+                const underline = (value.spec as { underline?: api.LTLint }).underline;
+                const preconditions = underline && underline.replacements.length >= n;
 
                 if (checking) return preconditions;
                 if (!preconditions) return;
 
                 // At this point, the check must have been successful.
-                const { from, to, value } = matches[0];
-                const change = { from, to, insert: value.spec.underline.replacements[n - 1] };
+                const change = { from, to, insert: underline.replacements[n - 1] };
 
                 // Insert the text of the match
                 editorView.dispatch({
@@ -267,13 +273,13 @@ export default class LanguageToolPlugin extends Plugin {
         const cursor = underlines.iter(selection.from);
         while (cursor.value != null && cursor.from <= selection.to) {
             populated = true;
-            const match = cursor.value.spec.underline as api.LTMatch;
+            const match = (cursor.value.spec as { underline: api.LTMatch }).underline;
             menu.addItem(item => {
                 item.setTitle(`LanguageTool (${match.text})`);
                 item.setIcon("spell-check");
                 item.setSection("spellcheck");
                 // @ts-expect-error, not typed
-                const submenu: Menu = item.setSubmenu();
+                const submenu = (item as { setSubmenu: () => Menu }).setSubmenu();
                 this.populateSuggestionSubmenu(submenu, match, cursor, editor);
             });
             cursor.next();
@@ -357,7 +363,7 @@ export default class LanguageToolPlugin extends Plugin {
                     });
 
                     // @ts-expect-error, not typed
-                    const dom = subItem.dom;
+                    const dom = subItem.dom as HTMLElement;
                     setTooltip(dom, `${match.categoryId} > ${match.ruleId}`);
                 });
             }
@@ -379,7 +385,7 @@ export default class LanguageToolPlugin extends Plugin {
             editorView.state.selection.main.from,
             editorView.state.selection.main.to,
         );
-        if (word.match(/[\s\.]/)) return false;
+        if (word.match(/[\s.]/)) return false;
 
         if (checking) return true;
 
@@ -395,9 +401,8 @@ export default class LanguageToolPlugin extends Plugin {
         const suffix = sentence.indexOf(".");
         if (suffix !== -1) sentence = sentence.slice(0, suffix + 1);
 
-        synonyms
-            .query(sentence, sel)
-            .then(replacements =>
+        synonyms.query(sentence, sel).then(
+            replacements =>
                 editorView.dispatch({
                     effects: [
                         addUnderline.of({
@@ -411,12 +416,13 @@ export default class LanguageToolPlugin extends Plugin {
                         }),
                     ],
                 }),
-            )
-            .catch(e => {
-                console.error(e);
-                this.pushLogs(e);
-                new Notice(e.message, 30000);
-            });
+            e => {
+                const err = e as Error;
+                console.error(err);
+                this.pushLogs(err);
+                new Notice(err.message, 30000);
+            },
+        );
         return true;
     }
 
@@ -485,6 +491,7 @@ export default class LanguageToolPlugin extends Plugin {
         const file = this.app.workspace.getActiveFile();
         const cache = file && this.app.metadataCache.getFileCache(file);
 
+        /* eslint-disable @typescript-eslint/no-unsafe-assignment */
         if (cache?.frontmatter != null) {
             const language = cache.frontmatter["lt-language"] ?? cache.frontmatter["lt_language"];
             const picky = cache.frontmatter["lt-picky"];
@@ -505,6 +512,7 @@ export default class LanguageToolPlugin extends Plugin {
                 settings.disabledCategories += "," + disabledCategories.join(",");
             return settings;
         }
+        /* eslint-enable @typescript-eslint/no-unsafe-assignment */
         return this.settings.options;
     }
 
@@ -542,8 +550,8 @@ export default class LanguageToolPlugin extends Plugin {
             if (settings.longCheckNotification && !auto && annotations.length() > 500)
                 longNotice = new Notice("Checking spelling...", 30000);
 
-            console.info(`Checking ${annotations.length()} characters...`);
-            console.debug("Text", JSON.stringify(annotations, undefined, "  "));
+            console.debug(`Checking ${annotations.length()} characters...`);
+            // console.debug("Text", JSON.stringify(annotations, undefined, "  "));
 
             matches = await api.check(settings, offset, annotations);
             // update range to the checked text
@@ -565,7 +573,7 @@ export default class LanguageToolPlugin extends Plugin {
         // As the codemirror state is immutable, we can directly compare the text objects
         if (currentDoc !== editor.state.doc) return true;
 
-        const effects: StateEffect<any>[] = [];
+        const effects: StateEffect<null | api.LTLint | api.LTRange>[] = [];
 
         // remove previous underlines
         if (range) {
@@ -603,7 +611,7 @@ export default class LanguageToolPlugin extends Plugin {
         if (effects.length) {
             editor.dispatch({ effects });
         }
-        console.info(`Found ${effects.length - 1} suggestions.`);
+        console.debug(`Found ${effects.length - 1} suggestions.`);
         // reset auto-check disable on successful check
         this.autoCheckSuppressErrorsUntil = 0;
         return effects.length > 1;
@@ -612,7 +620,7 @@ export default class LanguageToolPlugin extends Plugin {
     /**
      * Add an error to the log.
      */
-    private async pushLogs(e: Error): Promise<void> {
+    private pushLogs(e: Error) {
         const debugString =
             `${new Date().toLocaleString()}:\n` +
             `Error: '${e.message}'\n` +
@@ -669,8 +677,9 @@ export default class LanguageToolPlugin extends Plugin {
             let dictionary = [...words].sort(cmpIgnoreCase);
             await this.settings.update({ dictionary, remoteDictionary: dictionary });
         } catch (e) {
-            this.pushLogs(e);
-            new Notice(e.message, 30000);
+            const err = e as Error;
+            this.pushLogs(err);
+            new Notice(err.message, 30000);
             console.error("Failed sync spellcheck with LanguageTool", e);
         }
     }

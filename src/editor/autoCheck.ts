@@ -20,20 +20,23 @@ export function autoCheckListener(plugin: LanguageToolPlugin): Extension {
         });
 
         const view = update.view;
-        clearTimeout(debounceTimer);
-        debounceTimer = window.setTimeout(async () => {
-            try {
-                await plugin.runDetection(view, true, range);
-            } catch (e) {
-                if (Date.now() > plugin.autoCheckSuppressErrorsUntil) {
-                    // Prevent spamming errors
-                    plugin.autoCheckSuppressErrorsUntil = Date.now() + 15 * 60_000; // 15 minutes
-                    new Notice("Auto-check failed:\n" + e.message, 10000);
-                }
-                console.error("Auto-check failed", e);
-            }
-
+        window.clearTimeout(debounceTimer);
+        debounceTimer = window.setTimeout(() => {
+            const selection = range;
             range = { from: Infinity, to: -Infinity };
+
+            plugin.runDetection(view, true, selection).then(
+                () => {},
+                e => {
+                    const error = e as Error;
+                    if (Date.now() > plugin.autoCheckSuppressErrorsUntil) {
+                        // Prevent spamming errors
+                        plugin.autoCheckSuppressErrorsUntil = Date.now() + 15 * 60_000; // 15 minutes
+                        new Notice("Auto-check failed:\n" + error.message, 10000);
+                    }
+                    console.error("Auto-check failed", e);
+                },
+            );
         }, plugin.settings.options.autoCheckDelay);
     });
 }

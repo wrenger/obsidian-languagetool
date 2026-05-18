@@ -8,7 +8,7 @@ export const ignoreListRegEx = /(frontmatter|code|math|templater|blockid|hashtag
 type UnderlineMatcher = (underline: api.LTMatch) => boolean;
 
 /** Add new underline */
-export const addUnderline = StateEffect.define<api.LTMatch & { range: api.LTRange }>();
+export const addUnderline = StateEffect.define<api.LTLint>();
 /** Remove all underlines */
 export const clearAllUnderlines = StateEffect.define();
 /** Remove underlines in range */
@@ -62,7 +62,8 @@ export const underlineDecoration = StateField.define<DecorationSet>({
                 });
             } else if (e.is(clearMatchingUnderlines)) {
                 underlines = underlines.update({
-                    filter: (from, to, value) => !e.value(value.spec.underline as api.LTMatch),
+                    filter: (from, to, value) =>
+                        !e.value((value.spec as { underline: api.LTLint }).underline),
                 });
             }
         }

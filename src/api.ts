@@ -20,6 +20,12 @@ export interface LTRange {
     to: number;
 }
 
+export interface LTLint extends LTMatch {
+    range: LTRange;
+}
+
+type JsonValue = string | number | boolean | { [x: string]: JsonValue } | JsonValue[] | null;
+
 /**
  * The main function of LanguageTool, checking text for spell/grammar errors.
  */
@@ -27,7 +33,7 @@ export async function check(
     settings: Readonly<LTOptions>,
     offset: number,
     annotated: AnnotatedText,
-): Promise<(LTMatch & { range: LTRange })[]> {
+): Promise<LTLint[]> {
     const data = annotated.stringify();
 
     const lang = settings.staticLanguage ?? "auto";
@@ -67,7 +73,7 @@ export async function check(
 
     if (res.json == null) throw new Error(`Error processing response from LanguageTool.`);
 
-    const matches = jsonPathA<object>("$.matches[*]", res.json);
+    const matches = jsonPathA<JsonValue>("$.matches[*]", res.json as JsonValue);
     return matches.map(match => {
         const from = jsonPath<number>("$.offset@number()", match);
         const to = from + jsonPath<number>("$.length@number()", match);
@@ -90,9 +96,10 @@ export interface Language {
 }
 
 export async function languages(serverUrl: string): Promise<Language[]> {
-    const languages = await requestUrl({ url: `${serverUrl}/v2/languages` }).json;
+    const languages = (await requestUrl({ url: `${serverUrl}/v2/languages` }).json) as JsonValue;
     if (languages == null || !(languages instanceof Array))
         throw new Error(`Error processing response from LanguageTool.`);
+    // @ts-expect-error, not typed
     return languages as Language[];
 }
 
@@ -109,7 +116,7 @@ export async function words(settings: Readonly<LTOptions>): Promise<string[]> {
                     limit: "1000",
                 }).href,
             })
-        ).json;
+        ).json as JsonValue;
         return jsonPathA<string>("$.words[*]@string()", res);
     } catch (e) {
         throw new Error(`Requesting words failed\n${e}`);
@@ -129,7 +136,7 @@ export async function wordsAdd(settings: Readonly<LTOptions>, word: string): Pro
                 }).href,
                 method: "POST",
             })
-        ).json;
+        ).json as JsonValue;
         return jsonPath<boolean>("$.added@boolean()", res);
     } catch (e) {
         throw new Error(`Adding words failed\n${e}`);
@@ -149,7 +156,7 @@ export async function wordsDel(settings: Readonly<LTOptions>, word: string): Pro
                 }).href,
                 method: "POST",
             })
-        ).json;
+        ).json as JsonValue;
         return jsonPath<boolean>("$.deleted@boolean()", res);
     } catch (e) {
         throw new Error(`Deleting words failed\n${e}`);
@@ -186,7 +193,7 @@ class SynonymEn implements SynonymApi {
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(request),
                 })
-            ).json;
+            ).json as JsonValue;
             return jsonPathA<string>("$.data.suggestions[*][*]@string()", res);
         } catch (e) {
             throw new Error(`Requesting synonyms failed\n${e}`);
@@ -207,7 +214,7 @@ class SynonymDe implements SynonymApi {
                     url: sUrl(`${this.url}/${word}`, { before, after }).href,
                     method: "GET",
                 })
-            ).json;
+            ).json as JsonValue;
             return jsonPathA<string>("$.synsets[*].terms[*].term@string()", res);
         } catch (e) {
             throw new Error(`Requesting synonyms failed\n${e}`);
@@ -239,18 +246,15 @@ async function requestUrlChecked(request: RequestUrlParam): Promise<RequestUrlRe
     return response;
 }
 
-function jsonPath<T>(path: string, json: string | number | boolean | object | object[] | null): T {
-    const res = JSONPath({ path: path, json: json, wrap: false, eval: false });
+function jsonPath<T>(path: string, json: JsonValue): T {
+    const res = JSONPath<T | null>({ path: path, json: json, wrap: false, eval: false });
     if (res == null) throw new Error(`Error parsing response.`);
-    return res as T;
+    return res;
 }
-function jsonPathA<T>(
-    path: string,
-    json: string | number | boolean | object | object[] | null,
-): T[] {
-    const res = JSONPath({ path: path, json: json, wrap: true, eval: false });
+function jsonPathA<T>(path: string, json: JsonValue): T[] {
+    const res = JSONPath<T[] | null>({ path: path, json: json, wrap: true, eval: false });
     if (res == null || !(res instanceof Array)) throw new Error(`Error parsing response.`);
-    return res as T[];
+    return res;
 }
 
 function sUrl(url: string, search: Record<string, string>): URL {

@@ -5,7 +5,6 @@ import {
     Modal,
     Notice,
     PluginSettingTab,
-    requireApiVersion,
     Setting,
     SliderComponent,
     TextComponent,
@@ -163,10 +162,7 @@ export class LTSettingsTab extends PluginSettingTab {
 
     public constructor(app: App, plugin: LanguageToolPlugin) {
         super(app, plugin);
-        if (requireApiVersion("1.11.0")) {
-            let tab = this as any;
-            tab.icon = "spell-check";
-        }
+        this.icon = "spell-check";
         this.plugin = plugin;
     }
 
@@ -216,7 +212,11 @@ export class LTSettingsTab extends PluginSettingTab {
         });
     }
 
-    public async display(): Promise<void> {
+    public display(): void {
+        this.displayAsync().catch(e => console.error(e));
+    }
+
+    async displayAsync(): Promise<void> {
         const { containerEl } = this;
         containerEl.empty();
 
@@ -257,7 +257,8 @@ export class LTSettingsTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName("Endpoint")
-            .setDesc("Choose the LanguageTool server url")
+            // eslint-disable-next-line obsidianmd/ui/sentence-case
+            .setDesc("Choose the LanguageTool server URL")
             .then(setting => {
                 setting.controlEl.classList.add("lt-settings-grid");
 
@@ -282,7 +283,7 @@ export class LTSettingsTab extends PluginSettingTab {
                                     .setDisabled(value !== "custom");
 
                             if (autoCheckDelaySlider)
-                                this.configureCheckDelay(autoCheckDelaySlider, endpoint);
+                                await this.configureCheckDelay(autoCheckDelaySlider, endpoint);
 
                             await this.notifyEndpointChange(settings.options);
                         });
@@ -304,21 +305,25 @@ export class LTSettingsTab extends PluginSettingTab {
                             }
 
                             if (endpointTimer) window.clearTimeout(endpointTimer);
-                            endpointTimer = window.setTimeout(async () => {
-                                try {
-                                    await this.notifyEndpointChange(settings.options);
-                                    if (endpointNotice) endpointNotice.hide();
-                                    endpointNotice = new Notice(
-                                        "Successfully contacted LanguageTool server.",
-                                        3000,
-                                    );
-                                } catch (error) {
-                                    if (endpointNotice) endpointNotice.hide();
-                                    endpointNotice = new Notice(
-                                        `Error contacting LanguageTool server:\n${error.message}`,
-                                        3000,
-                                    );
-                                }
+                            endpointTimer = window.setTimeout(() => {
+                                this.notifyEndpointChange(settings.options).then(
+                                    () => {
+                                        if (endpointNotice) endpointNotice.hide();
+                                        endpointNotice = new Notice(
+                                            // eslint-disable-next-line obsidianmd/ui/sentence-case
+                                            "Successfully contacted LanguageTool server.",
+                                            3000,
+                                        );
+                                    },
+                                    e => {
+                                        const error = e as Error;
+                                        if (endpointNotice) endpointNotice.hide();
+                                        endpointNotice = new Notice(
+                                            `Error contacting LanguageTool server:\n${error.message}`,
+                                            3000,
+                                        );
+                                    },
+                                );
                             }, 600);
                         });
                 });
@@ -340,7 +345,7 @@ export class LTSettingsTab extends PluginSettingTab {
             .setDesc(
                 createFragment(frag => {
                     frag.createEl("a", {
-                        text: "Click here for information about Premium Access",
+                        text: "Click here for information about premium access",
                         href: "https://github.com/wrenger/obsidian-languagetool#premium-accounts",
                         attr: { target: "_blank" },
                     });
@@ -351,7 +356,7 @@ export class LTSettingsTab extends PluginSettingTab {
                     await settings.update({ apikey: value.replace(/\s+/g, "") });
                     if (settings.options.apikey && endpoint !== "premium") {
                         new Notice(
-                            "You have entered an API Key but you are not using the Premium Endpoint",
+                            "You have entered an API key but you are not using the premium endpoint",
                         );
                     }
                 }),
@@ -367,10 +372,10 @@ export class LTSettingsTab extends PluginSettingTab {
         new Setting(containerEl)
             .setName("Auto check delay (ms)")
             .setDesc("Time to wait for autocheck after the last key press")
-            .addSlider(component => {
+            .addSlider(async component => {
                 autoCheckDelaySlider = component;
 
-                this.configureCheckDelay(component, endpoint);
+                await this.configureCheckDelay(component, endpoint);
                 component
                     .setValue(settings.options.autoCheckDelay)
                     .onChange(async value => {
@@ -412,7 +417,7 @@ export class LTSettingsTab extends PluginSettingTab {
             });
         });
 
-        new Setting(containerEl).setName("Language settings").setHeading();
+        new Setting(containerEl).setName("Language").setHeading();
 
         new Setting(containerEl)
             .setName("Mother tongue")
@@ -457,7 +462,7 @@ export class LTSettingsTab extends PluginSettingTab {
                     }
 
                     component
-                        .addOption("auto", "Auto Detect")
+                        .addOption("auto", "Auto detect")
                         .addOptions(Object.fromEntries(staticLang.map(v => [v.longCode, v.name])))
                         .setValue(settings.options.staticLanguage ?? "auto")
                         .onChange(async value => {
@@ -478,17 +483,17 @@ export class LTSettingsTab extends PluginSettingTab {
             new Setting(containerEl)
                 .setName(`Interpret ${lang} as`)
                 .addDropdown(async component => {
-                    this.configureLanguageVariants(component, id);
+                    await this.configureLanguageVariants(component, id);
                 });
         }
 
         // ---------------------------------------------------------------------
         // Spellcheck
         // ---------------------------------------------------------------------
-        new Setting(containerEl).setName("Spellcheck Dictionary").setHeading();
+        new Setting(containerEl).setName("Spellcheck dictionary").setHeading();
 
         new Setting(containerEl)
-            .setName("Ignored Words")
+            .setName("Ignored words")
             .setDesc("Words that should not be highlighted as spelling mistakes.")
             .addButton(component => {
                 component
@@ -500,6 +505,7 @@ export class LTSettingsTab extends PluginSettingTab {
             });
 
         new Setting(containerEl)
+            // eslint-disable-next-line obsidianmd/ui/sentence-case
             .setName("Sync with LanguageTool")
             .setDesc("This is only supported for premium users.")
             .addToggle(component => {
@@ -555,6 +561,7 @@ export class LTSettingsTab extends PluginSettingTab {
             .setDesc("Comma-separated list of categories")
             .addText(text =>
                 text
+                    // eslint-disable-next-line obsidianmd/ui/sentence-case
                     .setPlaceholder("CATEGORY_1,CATEGORY_2")
                     .setValue(settings.options.enabledCategories ?? "")
                     .onChange(async value => {
@@ -567,6 +574,7 @@ export class LTSettingsTab extends PluginSettingTab {
             .setDesc("Comma-separated list of categories")
             .addText(text =>
                 text
+                    // eslint-disable-next-line obsidianmd/ui/sentence-case
                     .setPlaceholder("CATEGORY_1,CATEGORY_2")
                     .setValue(settings.options.disabledCategories ?? "")
                     .onChange(async value => {
@@ -579,6 +587,7 @@ export class LTSettingsTab extends PluginSettingTab {
             .setDesc("Comma-separated list of rules")
             .addText(text =>
                 text
+                    // eslint-disable-next-line obsidianmd/ui/sentence-case
                     .setPlaceholder("RULE_1,RULE_2")
                     .setValue(settings.options.enabledRules ?? "")
                     .onChange(async value => {
@@ -591,6 +600,7 @@ export class LTSettingsTab extends PluginSettingTab {
             .setDesc("Comma-separated list of rules")
             .addText(text =>
                 text
+                    // eslint-disable-next-line obsidianmd/ui/sentence-case
                     .setPlaceholder("RULE_1,RULE_2")
                     .setValue(settings.options.disabledRules ?? "")
                     .onChange(async value => {
@@ -606,7 +616,7 @@ export class LTSettingsTab extends PluginSettingTab {
         new Setting(containerEl)
             .setName("Long check notification")
             .setDesc(
-                "Show the 'Check spelling...' notification when a manual check is taking a long time",
+                "Show the 'check spelling...' notification when a manual check is taking a long time",
             )
             .addToggle(component => {
                 component.setValue(settings.options.longCheckNotification).onChange(async value => {
@@ -616,6 +626,7 @@ export class LTSettingsTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName("Inject property types")
+            // eslint-disable-next-line obsidianmd/ui/sentence-case
             .setDesc("Define the properties for note-specific LanguageTool settings.")
             .addToggle(component => {
                 component.setValue(settings.options.injectProperties).onChange(async value => {
@@ -671,10 +682,13 @@ export class DictionaryModal extends Modal {
             },
         );
 
-        this.plugin.syncDictionary().then(() => {
-            this.words = this.plugin.settings.options.dictionary;
-            if (buttonContainer) createButtons(buttonContainer);
-        });
+        this.plugin.syncDictionary().then(
+            () => {
+                this.words = this.plugin.settings.options.dictionary;
+                if (buttonContainer) createButtons(buttonContainer);
+            },
+            e => {},
+        );
 
         let newWord = "";
         let addComponent: null | TextComponent = null;
@@ -707,7 +721,11 @@ export class DictionaryModal extends Modal {
             });
     }
 
-    async onClose() {
+    onClose() {
+        this.onCloseAsync().catch(e => console.error(e));
+    }
+
+    async onCloseAsync() {
         this.contentEl.empty();
         await this.plugin.settings.update({ dictionary: this.words });
         await this.plugin.syncDictionary();

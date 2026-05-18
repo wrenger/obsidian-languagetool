@@ -47,9 +47,7 @@ function createTooltip(
                         await plugin.settings.update({ dictionary });
                         // Remove other underlines with the same word
                         view.dispatch({
-                            effects: [
-                                clearMatchingUnderlines.of(match => match.text === match.text),
-                            ],
+                            effects: [clearMatchingUnderlines.of(m => m.text === match.text)],
                         });
                     };
                 });
@@ -84,7 +82,7 @@ function createTooltip(
                 container.createDiv({ cls: "lt-info-button clickable-icon" }, button => {
                     setIcon(button, "info");
                     button.onclick = () => {
-                        const popup = document.getElementsByClassName("lt-info-box").item(0);
+                        const popup = activeDocument.getElementsByClassName("lt-info-box").item(0);
                         if (popup) popup.toggleAttribute("hidden");
                     };
                 });
@@ -94,19 +92,27 @@ function createTooltip(
             // \u00A0 is a non-breaking space
             popup.createDiv({ cls: "lt-info", text: `Category:\u00A0${category}` });
             popup.createDiv({ cls: "lt-info", text: `Rule:\u00A0${ruleId}` });
-            popup.createDiv({ cls: "lt-info", text: `Text:\u00A0${match.text} (${range.from}-${range.to})` });
+            popup.createDiv({
+                cls: "lt-info",
+                text: `Text:\u00A0${match.text} (${range.from}-${range.to})`,
+            });
         });
     });
 }
 
-function lintTooltip(plugin: LanguageToolPlugin, view: EditorView, pos: number, side: -1 | 1): Tooltip | null {
+function lintTooltip(
+    plugin: LanguageToolPlugin,
+    view: EditorView,
+    pos: number,
+    side: -1 | 1,
+): Tooltip | null {
     const state = view.state;
     const underlines = state.field(underlineDecoration);
     if (underlines.size === 0 || state.selection.ranges.length > 1) return null;
 
     let cursor = underlines.iter(pos);
     if (cursor.value != null && cursor.from <= pos && cursor.to >= pos) {
-        let match = cursor.value.spec.underline as api.LTMatch;
+        let match = (cursor.value.spec as { underline: api.LTLint }).underline;
         return {
             pos: cursor.from,
             end: cursor.to,
@@ -114,18 +120,15 @@ function lintTooltip(plugin: LanguageToolPlugin, view: EditorView, pos: number, 
             strictSide: false,
             arrow: false,
             clip: false,
-            create: view => ({
-                dom: createTooltip(plugin, view, match, cursor),
-            }),
+            create: view => ({ dom: createTooltip(plugin, view, match, cursor) }),
         };
     }
     return null;
 }
 
 export function buildHoverTooltip(plugin: LanguageToolPlugin): Extension {
-    return hoverTooltip(lintTooltip.bind(null, plugin), {
-        hideOnChange: true,
-    });
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+    return hoverTooltip(lintTooltip.bind(null, plugin), { hideOnChange: true });
 }
 
 export const baseTheme = EditorView.baseTheme({
@@ -151,24 +154,15 @@ export const baseTheme = EditorView.baseTheme({
                 textDecoration: "underline 2px var(--lt-highlight)",
                 "-webkit-text-decoration": "underline 2px var(--lt-highlight)",
             },
-            "& > .lt-message": {
-                display: "block",
-                padding: "0 12px",
-            },
+            "& > .lt-message": { display: "block", padding: "0 12px" },
             "& > .lt-bottom": {
                 minHeight: "10px",
                 padding: "0 12px",
                 position: "relative",
                 "& > .lt-buttoncontainer": {
-                    "&:not(:empty)": {
-                        paddingTop: "10px",
-                    },
-                    "& > button": {
-                        marginRight: "4px",
-                        marginBottom: "4px",
-                        padding: "4px 6px",
-                    }
-                }
+                    "&:not(:empty)": { paddingTop: "10px" },
+                    "& > button": { marginRight: "4px", marginBottom: "4px", padding: "4px 6px" },
+                },
             },
             "& > .lt-ignore-container": {
                 display: "flex",
@@ -182,30 +176,20 @@ export const baseTheme = EditorView.baseTheme({
                     alignItems: "center",
                     lineHeight: 1,
                     color: "var(--text-muted)",
-                    "& > span": {
-                        display: "flex",
-                        "&:last-child": {
-                            marginLeft: "5px",
-                        }
-                    },
-                    "&:hover": {
-                        color: "var(--text-normal)",
-                    }
+                    "& > span": { display: "flex", "&:last-child": { marginLeft: "5px" } },
+                    "&:hover": { color: "var(--text-normal)" },
                 },
                 "& > .lt-info-container": {
                     display: "flex",
                     flex: 0,
-                    "& > .lt-info-button": {
-                        color: "var(--text-faint)",
-                        height: "100%",
-                    }
-                }
+                    "& > .lt-info-button": { color: "var(--text-faint)", height: "100%" },
+                },
             },
             "& > .lt-info-box": {
                 padding: "5px 0px 0px 0px",
                 overflowX: "scroll",
                 color: "var(--text-muted)",
-            }
+            },
         },
     },
     ".lt-underline": {
@@ -213,8 +197,6 @@ export const baseTheme = EditorView.baseTheme({
         transition: "background-color 100ms ease-out",
         textDecoration: "wavy underline var(--lt-highlight)",
         "-webkit-text-decoration": "wavy underline var(--lt-highlight)",
-        "&:hover": {
-            backgroundColor: "color-mix(in srgb, var(--lt-highlight), transparent 80%)",
-        },
+        "&:hover": { backgroundColor: "color-mix(in srgb, var(--lt-highlight), transparent 80%)" },
     },
 });
