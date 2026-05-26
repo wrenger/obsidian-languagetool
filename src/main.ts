@@ -97,9 +97,8 @@ export default class LanguageToolPlugin extends Plugin {
                 unsetType: (key: string) => void;
             };
             // @ts-expect-error, not typed
-            let typeManager = (this.app as {
-                metadataTypeManager: MetadataTypeManager;
-            }).metadataTypeManager;
+            let typeManager = (this.app as { metadataTypeManager: MetadataTypeManager })
+                .metadataTypeManager;
             for (const [key, type] of Object.entries(properties)) {
                 if (inject) typeManager.setType(key, type);
                 else typeManager.unsetType(key);

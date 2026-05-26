@@ -1,7 +1,1 @@
-{
-    "arrowParens": "avoid",
-    "singleQuote": false,
-    "printWidth": 100,
-    "tabWidth": 4,
-    "objectWrap": "collapse"
-}
+{ "arrowParens": "avoid", "singleQuote": false, "printWidth": 100, "objectWrap": "collapse" }

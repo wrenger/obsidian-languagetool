@@ -12,7 +12,7 @@
     "importHelpers": true,
     "strictNullChecks": true,
     "allowSyntheticDefaultImports": true,
-    "lib": ["dom", "scripthost", "ES2022"]
+    "lib": ["dom", "scripthost", "ES2022"],
   },
-  "include": ["**/*.ts", "scripts/**/*.ts", "version-bump.ts"]
+  "include": ["**/*.ts", "scripts/**/*.ts", "version-bump.ts"],
 }

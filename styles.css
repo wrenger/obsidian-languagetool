@@ -4,13 +4,13 @@
     --lt-style: #8981f3;
 }
 .lt-minor {
-    --lt-highlight: var(--lt-minor)
+    --lt-highlight: var(--lt-minor);
 }
 .lt-major {
-    --lt-highlight: var(--lt-major)
+    --lt-highlight: var(--lt-major);
 }
 .lt-style {
-    --lt-highlight: var(--lt-style)
+    --lt-highlight: var(--lt-style);
 }
 
 .lt-settings-grid {
