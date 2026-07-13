@@ -1,5 +1,5 @@
 import { Command, Editor, MarkdownView, Menu, Notice, Plugin, setIcon, setTooltip } from "obsidian";
-import { Decoration, EditorView } from "@codemirror/view";
+import { EditorView } from "@codemirror/view";
 import { ChangeSpec, StateEffect } from "@codemirror/state";
 import { endpointFromUrl, LTOptions, LTSettings, LTSettingsTab, SUGGESTIONS } from "./settings";
 import * as api from "api";
@@ -200,6 +200,33 @@ export default class LanguageToolPlugin extends Plugin {
             icon: "square-stack",
             editorCheckCallback: (checking, editor) => this.showSynonyms(editor, checking),
         });
+
+        this.addCommand({
+            id: "add-dict",
+            name: "Add to dictionary",
+            icon: "book-check",
+            editorCheckCallback: (checking, editor) => {
+                // @ts-expect-error, not typed
+                const editorView = editor.cm as EditorView;
+
+                let match = singleMatchAtCursor(editor, 0);
+                if (!match) return checking ? false : undefined;
+                if (checking) return true;
+
+                editorView.dispatch({
+                    effects: [clearMatchingUnderlines.of(m => m.text == match.text)],
+                });
+
+                let dictionary = [...this.settings.options.dictionary, match.text.trim()];
+                this.settings.update({ dictionary }).then(
+                    () => {},
+                    e => {
+                        console.error(e);
+                        this.pushLogs(e as Error);
+                    },
+                );
+            },
+        });
     }
 
     private applySuggestionCommand(n: number): Command {
@@ -210,34 +237,18 @@ export default class LanguageToolPlugin extends Plugin {
             editorCheckCallback(checking, editor) {
                 // @ts-expect-error, not typed
                 const editorView = editor.cm as EditorView;
-                const cursorOffset = editor.posToOffset(editor.getCursor());
 
-                const matches: { from: number; to: number; value: Decoration }[] = [];
-
-                // Get underline-matches at cursor
-                editorView.state
-                    .field(underlineDecoration)
-                    .between(cursorOffset, cursorOffset, (from, to, value) => {
-                        matches.push({ from, to, value });
-                    });
-
-                // Check that there is exactly one match that has a replacement in the slot that is called.
-                if (!matches || matches.length !== 1) return false;
-                const { from, to, value } = matches[0];
-
-                const underline = (value.spec as { underline?: api.LTLint }).underline;
-                const preconditions = underline && underline.replacements.length >= n;
-
-                if (checking) return preconditions;
-                if (!preconditions) return;
+                let match = singleMatchAtCursor(editor, n);
+                if (!match) return checking ? false : undefined;
+                if (checking) return true;
 
                 // At this point, the check must have been successful.
-                const change = { from, to, insert: underline.replacements[n - 1] };
+                const change = { ...match.range, insert: match.replacements[n - 1] };
 
                 // Insert the text of the match
                 editorView.dispatch({
                     changes: [change],
-                    effects: [clearUnderlinesInRange.of({ from, to })],
+                    effects: [clearUnderlinesInRange.of(match.range)],
                 });
             },
         };
@@ -682,4 +693,26 @@ export default class LanguageToolPlugin extends Plugin {
             console.error("Failed sync spellcheck with LanguageTool", e);
         }
     }
+}
+
+function singleMatchAtCursor(editor: Editor, minReplacements: number = 1): api.LTLint | undefined {
+    // @ts-expect-error, not typed
+    const editorView = editor.cm as EditorView;
+    const cursorOffset = editor.posToOffset(editor.getCursor());
+
+    const matches: api.LTLint[] = [];
+
+    // Get underline-matches at cursor
+    editorView.state
+        .field(underlineDecoration)
+        .between(cursorOffset, cursorOffset, (from, to, value) => {
+            let match = (value.spec as { underline?: api.LTMatch }).underline;
+            if (match) matches.push({ ...match, range: { from, to } });
+        });
+
+    // Check that there is exactly one match that has a replacement in the slot that is called.
+    if (!matches || matches.length !== 1) return undefined;
+    const underline = matches[0];
+    const preconditions = underline && underline.replacements.length >= minReplacements;
+    return preconditions ? underline : undefined;
 }
