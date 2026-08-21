@@ -1,21 +1,16 @@
 import {
     App,
-    DropdownComponent,
-    getIcon,
     Modal,
     Notice,
     PluginSettingTab,
     Setting,
-    SliderComponent,
-    TextComponent,
+    SettingDefinitionItem,
+    SettingDefinitionList,
 } from "obsidian";
 
 import LanguageToolPlugin from "./main";
 import * as api from "./api";
 import { cmpIgnoreCase } from "./helpers";
-
-const autoCheckDelayMax = 5000;
-const autoCheckDelayStep = 250;
 
 export const SUGGESTIONS = 8;
 
@@ -24,6 +19,7 @@ export const SUGGESTIONS = 8;
  * so we hardcode the ones from https://languagetool.org/editor/settings/language.
  */
 export const MOTHER_TONGUES: Record<string, string> = {
+    "": "Disabled",
     ar: "Arabic",
     ca: "Catalan",
     da: "Danish",
@@ -41,6 +37,49 @@ export const MOTHER_TONGUES: Record<string, string> = {
     sv: "Swedish",
     uk: "Ukrainian",
     zh: "Chinese",
+};
+
+/**
+ * Unfortunately LanguageTool API does not provide a list of supported mother language varieties,
+ * so we hardcode the ones from https://languagetool.org/editor/settings/language.
+ */
+
+export const LANGUAGE_VARIETIES: Record<
+    string,
+    { name: string; variants: Record<string, string> }
+> = {
+    en: {
+        name: "English",
+        variants: {
+            "en-US": "English (US)",
+            "en-GB": "English (British)",
+            "en-CA": "English (Canada)",
+            "en-AU": "English (Australia)",
+            "en-ZA": "English (South Africa)",
+            "en-NZ": "English (New Zealand)",
+        },
+    },
+    de: {
+        name: "German",
+        variants: {
+            "de-DE": "German (Germany)",
+            "de-AT": "German (Austria)",
+            "de-CH": "German (Switzerland)",
+        },
+    },
+    pt: {
+        name: "Portuguese",
+        variants: {
+            "pt-BR": "Portuguese (Brazil)",
+            "pt-PT": "Portuguese (Portugal)",
+            "pt-AO": "Portuguese (Angola)",
+            "pt-MZ": "Portuguese (Mozambique)",
+        },
+    },
+    ca: {
+        name: "Catalan",
+        variants: { "ca-ES": "Catalan", "ca-ES-valencia": "Catalan (Valencian)" },
+    },
 };
 
 export class Endpoint {
@@ -61,7 +100,7 @@ export class Endpoint {
 
 /** See https://languagetool.org/http-api/swagger-ui/# */
 const endpoints = {
-    standard: new Endpoint("https://api.languagetool.org", 20, 20000),
+    public: new Endpoint("https://api.languagetool.org", 20, 20000),
     premium: new Endpoint("https://api.languagetoolplus.com", 80, 75000),
     custom: new Endpoint("", 120, 1000000),
 };
@@ -78,41 +117,100 @@ export function getEndpoint(url: string): Endpoint {
 }
 
 /** Wrapper for LanguageTool settings */
-export abstract class LTSettings {
+export class LTSettings {
     private _options: LTOptions;
-    constructor() {
+    private tab: LTSettingsTab;
+    constructor(tab: LTSettingsTab) {
+        this.tab = tab;
         this._options = { ...DEFAULT_SETTINGS };
     }
     public get options(): Readonly<LTOptions> {
         return this._options;
     }
     public async update(options: Partial<LTOptions>): Promise<void> {
-        const newOptions = { ...this._options, ...options };
+        let newOptions = { ...options };
+
+        // Merge languageVariety with existing values if provided
+        if ("languageVariety" in newOptions) {
+            newOptions.languageVariety = {
+                ...this._options.languageVariety,
+                ...newOptions.languageVariety,
+            };
+        }
+
+        // React on changes
+
+        if (newOptions.endpoint != null && newOptions.endpoint !== "custom") {
+            newOptions.serverUrl = endpoints[newOptions.endpoint].url;
+        }
+        if (newOptions.endpoint != null || newOptions.serverUrl != null) {
+            // reload languages
+            console.debug("Endpoint reload:", newOptions.endpoint);
+            this.tab.load();
+        }
+        if (newOptions.injectProperties != null) {
+            this.tab.plugin.injectProperties(newOptions.injectProperties);
+        }
+
+        let updatedOptions = { ...this._options, ...newOptions };
         // Only save if something has changed
-        if (JSON.stringify(newOptions) !== JSON.stringify(this._options)) {
-            this._options = newOptions;
+        if (JSON.stringify(updatedOptions) !== JSON.stringify(this._options)) {
+            this._options = updatedOptions;
             await this.save(this._options);
         }
     }
+
     public async load(): Promise<void> {
         const options = await this.loadOptions();
         this._options = { ...DEFAULT_SETTINGS, ...options };
     }
-    protected abstract loadOptions(): Promise<LTOptions>;
-    protected abstract save(options: LTOptions): Promise<void>;
+
+    protected async loadOptions(): Promise<LTOptions> {
+        let data = (await this.tab.plugin.loadData()) ?? {};
+
+        // Migration: endpoint
+        if (!("endpoint" in data)) {
+            // Determine endpoint based on serverUrl
+            const endpoint = data.serverUrl
+                ? endpointFromUrl(data.serverUrl)
+                : DEFAULT_SETTINGS.endpoint;
+            data = { ...data, endpoint: endpoint };
+        }
+
+        // Migration: categories and rules
+        if (typeof data.enabledCategories === "string" && data.enabledCategories)
+            data = { ...data, enabledCategories: data.enabledCategories.split(",") };
+        if (data.enabledCategories) data.enabledCategories.sort(cmpIgnoreCase);
+        if (typeof data.disabledCategories === "string" && data.disabledCategories)
+            data = { ...data, disabledCategories: data.disabledCategories.split(",") };
+        if (data.disabledCategories) data.disabledCategories.sort(cmpIgnoreCase);
+        if (typeof data.enabledRules === "string" && data.enabledRules)
+            data = { ...data, enabledRules: data.enabledRules.split(",") };
+        if (data.enabledRules) data.enabledRules.sort(cmpIgnoreCase);
+        if (typeof data.disabledRules === "string" && data.disabledRules)
+            data = { ...data, disabledRules: data.disabledRules.split(",") };
+        if (data.disabledRules) data.disabledRules.sort(cmpIgnoreCase);
+
+        return data;
+    }
+
+    protected async save(options: LTOptions): Promise<void> {
+        await this.tab.plugin.saveData(options);
+    }
 }
 
 export interface LTOptions {
+    endpoint: EndpointType;
     serverUrl: string;
     apikey?: string;
     username?: string;
 
     shouldAutoCheck: boolean;
     autoCheckDelay: number;
-    synonyms?: string;
+    synonyms: string;
 
-    motherTongue?: string;
-    staticLanguage?: string;
+    motherTongue: string;
+    staticLanguage: string;
     languageVariety: Record<string, string>;
 
     dictionary: string[];
@@ -121,43 +219,76 @@ export interface LTOptions {
     remoteDictionary: string[];
 
     pickyMode: boolean;
-    enabledCategories?: string;
-    disabledCategories?: string;
-    enabledRules?: string;
-    disabledRules?: string;
+    enabledCategories: string[];
+    disabledCategories: string[];
+    enabledRules: string[];
+    disabledRules: string[];
 
     longCheckNotification: boolean;
     injectProperties: boolean;
 }
 
 export const DEFAULT_SETTINGS: LTOptions = {
-    serverUrl: endpoints["standard"].url,
-    autoCheckDelay: endpoints.standard.minDelay,
+    endpoint: "public",
+    serverUrl: endpoints["public"].url,
+    autoCheckDelay: endpoints.public.minDelay,
     shouldAutoCheck: false,
-    languageVariety: { en: "en-US", de: "de-DE", pt: "pt-PT", ca: "ca-ES" },
+    synonyms: "",
+    motherTongue: "",
+    staticLanguage: "",
+    languageVariety: Object.fromEntries(
+        Object.entries(LANGUAGE_VARIETIES).map(([k, v]) => [k, Object.keys(v.variants)[0]]),
+    ),
     dictionary: [],
     syncDictionary: false,
     remoteDictionary: [],
     pickyMode: false,
+    enabledCategories: [],
+    disabledCategories: [],
+    enabledRules: [],
+    disabledRules: [],
     longCheckNotification: true,
     injectProperties: true,
 };
 
-interface EndpointListener {
-    (e: string): Promise<void>;
-}
-interface LanguageListener {
-    (l: api.Language[]): Promise<void>;
-}
-function languageVariants(languages: api.Language[], code: string): Record<string, string> {
-    languages = languages.filter(v => v.code === code).filter(v => v.longCode !== v.code);
-    return Object.fromEntries(languages.map(v => [v.longCode, v.name]));
+class InputModal extends Modal {
+    constructor(
+        app: App,
+        title: string,
+        onSubmit: (result: string) => void,
+        validate?: (result: string) => string | void,
+    ) {
+        super(app);
+        this.setTitle(title);
+
+        let value = "";
+        const input = new Setting(this.contentEl).setName("New");
+        const submit = new Setting(this.contentEl).addButton(btn => {
+            btn.setButtonText("Submit")
+                .setCta()
+                .setDisabled(true)
+                .onClick(() => {
+                    this.close();
+                    onSubmit(value);
+                });
+        });
+        input.addText(text =>
+            text.onChange(v => {
+                value = v.trim();
+                if (validate) {
+                    const error = validate(v) ?? null;
+                    input.setErrorMessage(error);
+                    submit.setDisabled(!value || !!error);
+                } else {
+                    submit.setDisabled(!value);
+                }
+            }),
+        );
+    }
 }
 
 export class LTSettingsTab extends PluginSettingTab {
-    private readonly plugin: LanguageToolPlugin;
-    private endpointListeners: EndpointListener[] = [];
-    private languageListeners: LanguageListener[] = [];
+    readonly plugin: LanguageToolPlugin;
     private languages: api.Language[] = [];
 
     public constructor(app: App, plugin: LanguageToolPlugin) {
@@ -166,568 +297,330 @@ export class LTSettingsTab extends PluginSettingTab {
         this.plugin = plugin;
     }
 
-    private async configureCheckDelay(slider: SliderComponent, value: EndpointType): Promise<void> {
-        const minAutoCheckDelay = endpoints[value].minDelay;
-        await this.plugin.settings.update({
-            autoCheckDelay: Math.clamp(
-                this.plugin.settings.options.autoCheckDelay,
-                minAutoCheckDelay,
-                autoCheckDelayMax,
-            ),
-        });
-        slider.setLimits(minAutoCheckDelay, autoCheckDelayMax, autoCheckDelayStep);
-    }
-
-    public async notifyEndpointChange(settings: Readonly<LTOptions>): Promise<void> {
-        for (const listener of this.endpointListeners) {
-            await listener(settings.serverUrl);
+    async load(): Promise<void> {
+        if (this.plugin.settings.options.serverUrl) {
+            try {
+                this.languages = await api.languages(this.plugin.settings.options.serverUrl);
+                this.update();
+            } catch (e) {
+                console.error("Failed to load languages:", e);
+                new Notice("Failed to load languages", 5000);
+            }
         }
     }
 
-    private async configureLanguageVariants(
-        dropdown: DropdownComponent,
-        code: string,
-    ): Promise<void> {
-        const languageVariety = this.plugin.settings.options.languageVariety;
-        const variants = languageVariants(this.languages, code);
-        languageVariety[code] = languageVariety[code] ?? Object.keys(variants)[0];
+    getControlValue(key: string): unknown {
+        if (key.startsWith("languageVariety.")) {
+            const lang = key.split(".")[1];
+            return this.plugin.settings.options.languageVariety?.[lang];
+        }
+        return (this.plugin.settings.options as any)[key];
+    }
 
-        dropdown
-            .addOptions(variants)
-            .setValue(languageVariety[code])
-            .onChange(async value => {
-                languageVariety[code] = value;
-                await this.plugin.settings.update({ languageVariety });
+    async setControlValue(key: string, value: unknown): Promise<void> {
+        if (key.startsWith("languageVariety.")) {
+            const lang = key.split(".")[1];
+            await this.plugin.settings.update({
+                languageVariety: {
+                    ...this.plugin.settings.options.languageVariety,
+                    [lang]: value as string,
+                },
             });
-
-        this.languageListeners.push(async l => {
-            // Clear options
-            while (dropdown.selectEl.options.length > 0) {
-                dropdown.selectEl.remove(0);
-            }
-
-            const variants = languageVariants(l, code);
-            languageVariety[code] = languageVariety[code] ?? Object.keys(variants)[0];
-            dropdown.addOptions(variants).setValue(languageVariety[code]);
-        });
+        } else {
+            await this.plugin.settings.update({ [key]: value });
+        }
+        this.refreshDomState();
     }
 
-    public display(): void {
-        this.displayAsync().catch(e => console.error(e));
-    }
+    public getSettingDefinitions(): SettingDefinitionItem[] {
+        console.debug("getSettingDefinitions");
 
-    async displayAsync(): Promise<void> {
-        const { containerEl } = this;
-        containerEl.empty();
+        const sortedStrList = (
+            name: string,
+            key: string,
+            validate?: (v: string) => string | void,
+            onUpdate?: () => void,
+        ): SettingDefinitionList => {
+            const values = this.plugin.settings.options[key as keyof LTOptions];
+            if (!Array.isArray(values)) throw new Error(`Expected ${key} to be an array`);
+
+            return {
+                type: "list",
+                heading: name,
+                items: values.map(v => ({ name: v, searchable: false })),
+                emptyState: "No items",
+                addItem: {
+                    name: "Add item",
+                    action: () => {
+                        const modal = new InputModal(
+                            this.app,
+                            "Add item",
+                            v => {
+                                const newVals = new Set(values);
+                                newVals.add(v);
+                                this.plugin.settings.update({
+                                    [key]: [...newVals].sort(cmpIgnoreCase),
+                                });
+                                this.update();
+                                onUpdate?.();
+                            },
+                            validate,
+                        );
+                        modal.open();
+                    },
+                },
+                onDelete: index => {
+                    const copy = [...values];
+                    copy.splice(index, 1);
+                    this.plugin.settings.update({ [key]: copy });
+                    this.update();
+                    onUpdate?.();
+                },
+            };
+        };
 
         const settings = this.plugin.settings;
-
-        // Reset auto-check errors assuming the user fixes the issue
-        this.plugin.autoCheckSuppressErrorsUntil = 0;
-
-        this.endpointListeners = [];
-        this.endpointListeners.push(async url => {
-            let lang: api.Language[] = [];
-            if (url) lang = await api.languages(url);
-            this.languages = lang;
-            for (const listener of this.languageListeners) {
-                await listener(lang);
-            }
-        });
-        this.endpointListeners.push(async url => {
-            await this.plugin.syncDictionary();
-        });
-        this.languageListeners = [];
-
-        new Setting(containerEl)
-            .setName("Error logs")
-            .setDesc(`${this.plugin.logs.length} messages`)
-            .addButton(component => {
-                component.setButtonText("Copy to clipboard").onClick(async () => {
-                    await window.navigator.clipboard.writeText(this.plugin.logs.join("\n"));
-                    new Notice("Logs copied to clipboard");
-                });
-            });
-
-        let endpoint = endpointFromUrl(settings.options.serverUrl);
-        let autoCheckDelaySlider: SliderComponent | null = null;
-
-        let endpointTimer: number | null = null;
-        let endpointNotice: Notice | null = null;
-
-        new Setting(containerEl)
-            .setName("Endpoint")
-            // eslint-disable-next-line obsidianmd/ui/sentence-case
-            .setDesc("Choose the LanguageTool server URL")
-            .then(setting => {
-                setting.controlEl.classList.add("lt-settings-grid");
-
-                let dropdown: DropdownComponent | null = null;
-                let input: TextComponent | null = null;
-                setting.addDropdown(component => {
-                    dropdown = component;
-                    component
-                        .addOptions({
-                            standard: "(Standard) api.languagetool.org",
-                            premium: "(Premium) api.languagetoolplus.com",
-                            custom: "Custom URL",
-                        })
-                        .setValue(endpoint)
-                        .onChange(async value => {
-                            endpoint = value as EndpointType;
-                            await settings.update({ serverUrl: endpoints[endpoint].url });
-
-                            if (input)
-                                input
-                                    .setValue(settings.options.serverUrl)
-                                    .setDisabled(value !== "custom");
-
-                            if (autoCheckDelaySlider)
-                                await this.configureCheckDelay(autoCheckDelaySlider, endpoint);
-
-                            await this.notifyEndpointChange(settings.options);
-                        });
-                });
-                setting.addText(text => {
-                    input = text;
-                    text.setPlaceholder("http://your-custom-url.com")
-                        .setValue(settings.options.serverUrl)
-                        .setDisabled(endpoint !== "custom")
-                        .onChange(async value => {
-                            await settings.update({
-                                serverUrl: value.replace(/\/v2\/check\/$/, "").replace(/\/$/, ""),
-                            });
-
-                            endpoint = endpointFromUrl(settings.options.serverUrl);
-                            if (endpoint !== "custom") {
-                                dropdown?.setValue(endpoint);
-                                input?.setDisabled(true);
-                            }
-
-                            if (endpointTimer) window.clearTimeout(endpointTimer);
-                            endpointTimer = window.setTimeout(() => {
-                                this.notifyEndpointChange(settings.options).then(
-                                    () => {
-                                        if (endpointNotice) endpointNotice.hide();
-                                        endpointNotice = new Notice(
-                                            // eslint-disable-next-line obsidianmd/ui/sentence-case
-                                            "Successfully contacted LanguageTool server.",
-                                            3000,
-                                        );
-                                    },
-                                    e => {
-                                        const error = e as Error;
-                                        if (endpointNotice) endpointNotice.hide();
-                                        endpointNotice = new Notice(
-                                            `Error contacting LanguageTool server:\n${error.message}`,
-                                            3000,
-                                        );
-                                    },
-                                );
-                            }, 600);
-                        });
-                });
-            });
-
-        new Setting(containerEl)
-            .setName("API username")
-            .setDesc("Enter a username/mail for API access")
-            .addText(text =>
-                text
-                    .setPlaceholder("peterlustig@example.com")
-                    .setValue(settings.options.username || "")
-                    .onChange(async value => {
-                        await settings.update({ username: value.replace(/\s+/g, "") });
-                    }),
-            );
-        new Setting(containerEl)
-            .setName("API key")
-            .setDesc(
-                createFragment(frag => {
+        return [
+            {
+                name: "Endpoint",
+                control: {
+                    type: "dropdown",
+                    key: "endpoint",
+                    options: Object.fromEntries(
+                        Object.entries(endpoints).map(([key, value]) => [
+                            key,
+                            `(${key}) ${value.url.replace(/^https?:\/\//, "")}`,
+                        ]),
+                    ),
+                    defaultValue: "public",
+                },
+            },
+            {
+                name: "Server URL",
+                control: {
+                    type: "text",
+                    key: "serverUrl",
+                    placeholder: "http://your-custom-url.com",
+                    validate: async (value: string) => {
+                        console.debug("check server url");
+                        if (settings.options.endpoint !== "custom") return;
+                        try {
+                            let languages = await api.languages(value);
+                            console.debug("Languages", languages);
+                            return undefined;
+                        } catch (e) {
+                            return "Cannot connect to server";
+                        }
+                    },
+                },
+                visible: () => settings.options.endpoint === "custom",
+            },
+            {
+                name: "API username",
+                control: {
+                    type: "text",
+                    key: "username",
+                    placeholder: "peterlustig@example.com",
+                    validate: (value: string) => {
+                        if (settings.options.endpoint === "premium" && !value)
+                            return "Username is required for premium endpoint";
+                    },
+                },
+                visible: () => settings.options.endpoint !== "public",
+            },
+            {
+                name: "API key",
+                control: {
+                    type: "text",
+                    key: "apikey",
+                    validate: (value: string) => {
+                        if (settings.options.endpoint === "premium" && !value)
+                            return "API key is required for premium endpoint";
+                    },
+                },
+                visible: () => settings.options.endpoint !== "public",
+            },
+            { name: "Auto check text", control: { type: "toggle", key: "shouldAutoCheck" } },
+            {
+                name: "Auto check delay",
+                control: {
+                    type: "slider",
+                    key: "autoCheckDelay",
+                    min: 500,
+                    max: 5000,
+                    step: 250,
+                    disabled: () => !settings.options.shouldAutoCheck,
+                },
+            },
+            {
+                name: "Find synonyms",
+                desc: createFragment(frag => {
                     frag.createEl("a", {
                         text: "Click here for information about premium access",
                         href: "https://github.com/wrenger/obsidian-languagetool#premium-accounts",
                         attr: { target: "_blank" },
                     });
                 }),
-            )
-            .addText(text =>
-                text.setValue(settings.options.apikey || "").onChange(async value => {
-                    await settings.update({ apikey: value.replace(/\s+/g, "") });
-                    if (settings.options.apikey && endpoint !== "premium") {
-                        new Notice(
-                            "You have entered an API key but you are not using the premium endpoint",
-                        );
-                    }
-                }),
-            );
-        new Setting(containerEl)
-            .setName("Auto check text")
-            .setDesc("Check text as you type")
-            .addToggle(component => {
-                component.setValue(settings.options.shouldAutoCheck).onChange(async value => {
-                    await settings.update({ shouldAutoCheck: value });
-                });
-            });
-        new Setting(containerEl)
-            .setName("Auto check delay (ms)")
-            .setDesc("Time to wait for autocheck after the last key press")
-            .addSlider(async component => {
-                autoCheckDelaySlider = component;
-
-                await this.configureCheckDelay(component, endpoint);
-                component
-                    .setValue(settings.options.autoCheckDelay)
-                    .onChange(async value => {
-                        await settings.update({ autoCheckDelay: value });
-                    })
-                    .setDynamicTooltip();
-            });
-
-        function synonymsDesc(frag: DocumentFragment): void {
-            frag.appendText("Enables the context menu for synonyms fetched from");
-            frag.createEl("br");
-            if (settings.options.synonyms != null) {
-                const synonyms = api.SYNONYMS[settings.options.synonyms];
-                if (!synonyms) {
-                    frag.appendText(" (unknown API)");
-                    return;
-                }
-                frag.createEl("a", {
-                    text: synonyms.url,
-                    href: synonyms.url,
-                    attr: { target: "_blank" },
-                });
-            } else {
-                frag.appendText("(none)");
-            }
-        }
-
-        const synonyms = new Setting(containerEl)
-            .setName("Find synonyms")
-            .setDesc(createFragment(synonymsDesc));
-        synonyms.addDropdown(component => {
-            component.addOption("none", "---");
-            for (const lang of Object.keys(api.SYNONYMS)) {
-                component.addOption(lang, lang);
-            }
-            component.setValue(settings.options.synonyms ?? "none").onChange(async value => {
-                await settings.update({ synonyms: value !== "none" ? value : undefined });
-                synonyms.setDesc(createFragment(synonymsDesc));
-            });
-        });
-
-        new Setting(containerEl).setName("Language").setHeading();
-
-        new Setting(containerEl)
-            .setName("Mother tongue")
-            .setDesc(
-                "Set mother tongue if you want to be warned about false friends when writing in other languages. " +
-                    "This setting will also be used for automatic language detection.",
-            )
-            .addDropdown(component => {
-                component
-                    .addOption("none", "---")
-                    .addOptions(MOTHER_TONGUES)
-                    .setValue(settings.options.motherTongue ?? "none")
-                    .onChange(async value => {
-                        await settings.update({
-                            motherTongue: value !== "none" ? value : undefined,
-                        });
-                    });
-            });
-
-        new Setting(containerEl)
-            .setName("Static language")
-            .setDesc(
-                "Set a static language that will always be used" +
-                    "(LanguageTool tries to auto detect the language, this is usually not necessary)",
-            )
-            .addDropdown(component => {
-                this.languageListeners.push(async languages => {
-                    // API states: For languages with variants (English, German, Portuguese)
-                    // spell checking will only be activated when you specify the variant,
-                    // e.g. en-GB instead of just en.
-                    // Therefore we remove base languages (en, de, pt) that have other variants.
-                    const staticLang = languages.filter(
-                        v =>
-                            v.longCode.length > 2 ||
-                            v.longCode !== v.code ||
-                            languages.filter(l => l.code == v.code).length <= 1,
-                    );
-
-                    // Clear options
-                    while (component.selectEl.options.length > 0) {
-                        component.selectEl.remove(0);
-                    }
-
-                    component
-                        .addOption("auto", "Auto detect")
-                        .addOptions(Object.fromEntries(staticLang.map(v => [v.longCode, v.name])))
-                        .setValue(settings.options.staticLanguage ?? "auto")
-                        .onChange(async value => {
-                            await settings.update({
-                                staticLanguage: value !== "auto" ? value : undefined,
-                            });
-                        });
-                });
-            });
-
-        new Setting(containerEl)
-            .setName("Language varieties")
-            .setHeading()
-            .setDesc("Some languages have varieties depending on the country they are spoken in.");
-
-        const langVariants = { en: "English", de: "German", pt: "Portuguese", ca: "Catalan" };
-        for (const [id, lang] of Object.entries(langVariants)) {
-            new Setting(containerEl)
-                .setName(`Interpret ${lang} as`)
-                .addDropdown(async component => {
-                    await this.configureLanguageVariants(component, id);
-                });
-        }
-
-        // ---------------------------------------------------------------------
-        // Spellcheck
-        // ---------------------------------------------------------------------
-        new Setting(containerEl).setName("Spellcheck dictionary").setHeading();
-
-        new Setting(containerEl)
-            .setName("Ignored words")
-            .setDesc("Words that should not be highlighted as spelling mistakes.")
-            .addButton(component => {
-                component
-                    .setIcon("settings")
-                    .setTooltip("Edit dictionary")
-                    .onClick(() => {
-                        new DictionaryModal(this.app, this.plugin).open();
-                    });
-            });
-
-        new Setting(containerEl)
-            // eslint-disable-next-line obsidianmd/ui/sentence-case
-            .setName("Sync with LanguageTool")
-            .setDesc("This is only supported for premium users.")
-            .addToggle(component => {
-                component
-                    .setDisabled(endpoint !== "premium")
-                    .setValue(settings.options.syncDictionary)
-                    .onChange(async value => {
-                        await settings.update({ syncDictionary: value });
-                        if (value) await this.plugin.syncDictionary();
-                    });
-                this.endpointListeners.push(async url => {
-                    component.setDisabled(endpointFromUrl(url) !== "premium");
-                });
-            });
-
-        // ---------------------------------------------------------------------
-        // Rules
-        // ---------------------------------------------------------------------
-        new Setting(containerEl)
-            .setName("Rule categories")
-            .setHeading()
-            .setDesc(
-                createFragment(frag => {
-                    frag.appendText(
-                        "The picky mode enables a lot of extra categories and rules. " +
-                            "Additionally, you can enable or disable specific rules down below.",
-                    );
-                    frag.createEl("br");
-                    frag.createEl("a", {
-                        text: "Click here for a list of rules and categories",
-                        href: "https://community.languagetool.org/rule/list",
-                        attr: { target: "_blank" },
-                    });
-                }),
-            );
-
-        new Setting(containerEl)
-            .setName("Picky mode")
-            .setDesc(
-                "Provides more style and tonality suggestions, " +
-                    "detects long or complex sentences, " +
-                    "recognizes colloquialism and redundancies, " +
-                    "proactively suggests synonyms for commonly overused words",
-            )
-            .addToggle(component => {
-                component.setValue(settings.options.pickyMode).onChange(async value => {
-                    await settings.update({ pickyMode: value });
-                });
-            });
-
-        new Setting(containerEl)
-            .setName("Enabled categories")
-            .setDesc("Comma-separated list of categories")
-            .addText(text =>
-                text
-                    // eslint-disable-next-line obsidianmd/ui/sentence-case
-                    .setPlaceholder("CATEGORY_1,CATEGORY_2")
-                    .setValue(settings.options.enabledCategories ?? "")
-                    .onChange(async value => {
-                        await settings.update({ enabledCategories: value.replace(/\s+/g, "") });
-                    }),
-            );
-
-        new Setting(containerEl)
-            .setName("Disabled categories")
-            .setDesc("Comma-separated list of categories")
-            .addText(text =>
-                text
-                    // eslint-disable-next-line obsidianmd/ui/sentence-case
-                    .setPlaceholder("CATEGORY_1,CATEGORY_2")
-                    .setValue(settings.options.disabledCategories ?? "")
-                    .onChange(async value => {
-                        await settings.update({ disabledCategories: value.replace(/\s+/g, "") });
-                    }),
-            );
-
-        new Setting(containerEl)
-            .setName("Enabled rules")
-            .setDesc("Comma-separated list of rules")
-            .addText(text =>
-                text
-                    // eslint-disable-next-line obsidianmd/ui/sentence-case
-                    .setPlaceholder("RULE_1,RULE_2")
-                    .setValue(settings.options.enabledRules ?? "")
-                    .onChange(async value => {
-                        await settings.update({ enabledRules: value.replace(/\s+/g, "") });
-                    }),
-            );
-
-        new Setting(containerEl)
-            .setName("Disabled rules")
-            .setDesc("Comma-separated list of rules")
-            .addText(text =>
-                text
-                    // eslint-disable-next-line obsidianmd/ui/sentence-case
-                    .setPlaceholder("RULE_1,RULE_2")
-                    .setValue(settings.options.disabledRules ?? "")
-                    .onChange(async value => {
-                        await settings.update({ disabledRules: value.replace(/\s+/g, "") });
-                    }),
-            );
-
-        // ---------------------------------------------------------------------
-        // Advanced
-        // ---------------------------------------------------------------------
-        new Setting(containerEl).setName("Advanced").setHeading();
-
-        new Setting(containerEl)
-            .setName("Long check notification")
-            .setDesc(
-                "Show the 'check spelling...' notification when a manual check is taking a long time",
-            )
-            .addToggle(component => {
-                component.setValue(settings.options.longCheckNotification).onChange(async value => {
-                    await settings.update({ longCheckNotification: value });
-                });
-            });
-
-        new Setting(containerEl)
-            .setName("Inject property types")
-            // eslint-disable-next-line obsidianmd/ui/sentence-case
-            .setDesc("Define the properties for note-specific LanguageTool settings.")
-            .addToggle(component => {
-                component.setValue(settings.options.injectProperties).onChange(async value => {
-                    await settings.update({ injectProperties: value });
-                    this.plugin.injectProperties(value);
-                });
-            });
-
-        await this.notifyEndpointChange(settings.options);
-    }
-}
-
-export class DictionaryModal extends Modal {
-    plugin: LanguageToolPlugin;
-    words: string[];
-
-    constructor(app: App, plugin: LanguageToolPlugin) {
-        super(app);
-        this.setTitle("Spellcheck dictionary");
-        this.plugin = plugin;
-        this.words = plugin.settings.options.dictionary;
-    }
-
-    async onOpen() {
-        this.words = this.plugin.settings.options.dictionary;
-        const { contentEl } = this;
-
-        const createButtons = (container: HTMLDivElement) => {
-            container.replaceChildren(
-                ...this.words.map(word =>
-                    container.createDiv({ cls: "multi-select-pill" }, pill => {
-                        pill.createDiv({ cls: "multi-select-pill-content" }, content =>
-                            content.createSpan({ text: word }),
-                        );
-                        pill.createDiv({ cls: "multi-select-pill-remove-button" }, remove => {
-                            remove.appendChild(getIcon("x")!);
-                            remove.onClickEvent(() => {
-                                this.words.remove(word);
-                                createButtons(container);
-                            });
-                        });
-                    }),
-                ),
-            );
-        };
-
-        let buttonContainer: null | HTMLDivElement = null;
-        contentEl.createDiv(
-            { cls: ["multi-select-container", "lt-dictionary-words"] },
-            container => {
-                buttonContainer = container;
-                createButtons(container);
+                control: {
+                    type: "dropdown",
+                    key: "synonyms",
+                    options: {
+                        "": "Disabled",
+                        ...Object.fromEntries(
+                            Object.entries(api.SYNONYMS).map(([k, v]) => [k, v?.name]),
+                        ),
+                    },
+                },
             },
-        );
-
-        this.plugin.syncDictionary().then(
-            () => {
-                this.words = this.plugin.settings.options.dictionary;
-                if (buttonContainer) createButtons(buttonContainer);
+            {
+                type: "group",
+                heading: "Language",
+                items: [
+                    {
+                        name: "Static language",
+                        desc: createFragment(frag => {
+                            frag.appendText("The language to use for spell checking.");
+                            frag.createEl("br");
+                            frag.appendText('The "Auto detect" may not be accurate');
+                        }),
+                        control: {
+                            type: "dropdown",
+                            key: "staticLanguage",
+                            options: (() => {
+                                // API states: For languages with variants (English, German, Portuguese)
+                                // spell checking will only be activated when you specify the variant,
+                                // e.g. en-GB instead of just en.
+                                // Therefore we remove base languages (en, de, pt) that have other variants.
+                                const staticLang = this.languages.filter(
+                                    v =>
+                                        v.longCode.length > 2 ||
+                                        v.longCode !== v.code ||
+                                        this.languages.filter(l => l.code == v.code).length <= 1,
+                                );
+                                return {
+                                    "": "Auto detect",
+                                    ...Object.fromEntries(
+                                        staticLang.map(v => [v.longCode, v.name]),
+                                    ),
+                                };
+                            })(),
+                        },
+                    },
+                    {
+                        type: "page",
+                        name: "Language varieties",
+                        desc: createFragment(frag => {
+                            frag.appendText(
+                                "Some languages have varieties depending on the country they are spoken in.",
+                            );
+                            frag.createEl("br");
+                            frag.appendText(
+                                'When "Auto detect" is active, these languages will be interpreted as the following variant.',
+                            );
+                        }),
+                        items: Object.entries(LANGUAGE_VARIETIES).map(
+                            ([code, { name, variants }]) => ({
+                                name: `Interpret ${name} as`,
+                                control: {
+                                    type: "dropdown" as const,
+                                    key: `languageVariety.${code}`,
+                                    options: variants,
+                                },
+                            }),
+                        ),
+                        visible: () => !settings.options.staticLanguage,
+                    },
+                    {
+                        name: "Mother tongue",
+                        desc:
+                            "Set mother tongue if you want to be warned about false friends when writing in other languages. " +
+                            "This setting will also be used for automatic language detection.",
+                        control: { type: "dropdown", key: "motherTongue", options: MOTHER_TONGUES },
+                    },
+                ],
             },
-            e => {},
-        );
-
-        let newWord = "";
-        let addComponent: null | TextComponent = null;
-        const addWord = () => {
-            if (newWord) {
-                this.words = [...new Set([...this.words, newWord])].sort(cmpIgnoreCase);
-                if (buttonContainer) createButtons(buttonContainer);
-                if (addComponent) addComponent.setValue("");
-                newWord = "";
-            }
-        };
-
-        new Setting(contentEl)
-            .setName("Add")
-            .addText(component => {
-                addComponent = component
-                    .setValue(newWord)
-                    .onChange(value => (newWord = value.trim()));
-                component.inputEl.addEventListener("keypress", event => {
-                    if (event.key === "Enter") addWord();
-                });
-            })
-            .addExtraButton(component => {
-                component
-                    .setIcon("plus")
-                    .setTooltip("Add")
-                    .onClick(() => {
-                        addWord();
-                    });
-            });
-    }
-
-    onClose() {
-        this.onCloseAsync().catch(e => console.error(e));
-    }
-
-    async onCloseAsync() {
-        this.contentEl.empty();
-        await this.plugin.settings.update({ dictionary: this.words });
-        await this.plugin.syncDictionary();
+            {
+                type: "page",
+                name: "Spellcheck dictionary",
+                desc: "Add words to the dictionary to avoid highlighting them as misspelled.",
+                items: [
+                    {
+                        name: "Sync with LanguageTool",
+                        control: { type: "toggle", key: "syncDictionary" },
+                        visible: () => settings.options.endpoint === "premium",
+                    },
+                    sortedStrList("Ignored words", "dictionary"),
+                ],
+            },
+            { type: "group" },
+            {
+                type: "page",
+                name: "Categories and rules",
+                desc: "Configure active and ignored categories and rules.",
+                items: [
+                    {
+                        name: "Picky mode",
+                        desc:
+                            "Provides more style and tonality suggestions, " +
+                            "detects long or complex sentences, " +
+                            "recognizes colloquialism and redundancies, " +
+                            "proactively suggests synonyms for commonly overused words",
+                        control: { type: "toggle", key: "pickyMode" },
+                    },
+                    {
+                        name: "Categories and rules",
+                        desc: createFragment(frag => {
+                            frag.appendText("You can enable or disable specific categories/rules.");
+                            frag.createEl("br");
+                            frag.createEl("a", {
+                                text: "Click here for a list of rules and categories",
+                                href: "https://community.languagetool.org/rule/list",
+                                attr: { target: "_blank" },
+                            });
+                        }),
+                    },
+                    sortedStrList("Enabled categories", "enabledCategories", v => {
+                        if (!/^[A-Z_]+$/.test(v))
+                            return "Category name must be uppercase and underscore only";
+                    }),
+                    sortedStrList("Disabled categories", "disabledCategories", v => {
+                        if (!/^[A-Z_]+$/.test(v))
+                            return "Category name must be uppercase and underscore only";
+                    }),
+                    sortedStrList("Enabled rules", "enabledRules", v => {
+                        if (!/^[A-Z_]+$/.test(v))
+                            return "Rule name must be uppercase and underscore only";
+                    }),
+                    sortedStrList("Disabled rules", "disabledRules", v => {
+                        if (!/^[A-Z_]+$/.test(v))
+                            return "Rule name must be uppercase and underscore only";
+                    }),
+                ],
+            },
+            {
+                type: "group",
+                heading: "Advanced",
+                items: [
+                    {
+                        name: "Long check notification",
+                        desc: "Show the 'check spelling...' notification when a manual check is taking a long time.",
+                        control: { type: "toggle", key: "longCheckNotification" },
+                    },
+                    {
+                        name: "Inject property types",
+                        desc: "Define the properties for note-specific LanguageTool settings.",
+                        control: { type: "toggle", key: "injectProperties" },
+                    },
+                    {
+                        name: "Copy error logs to clipboard",
+                        desc: `${this.plugin.logs.length} messages`,
+                        action: async () => {
+                            await window.navigator.clipboard.writeText(this.plugin.logs.join("\n"));
+                            new Notice("Logs copied to clipboard");
+                        },
+                    },
+                ],
+            },
+        ];
     }
 }

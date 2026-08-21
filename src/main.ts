@@ -1,8 +1,19 @@
-import { Command, Editor, MarkdownView, Menu, Notice, Plugin, setIcon, setTooltip } from "obsidian";
+import {
+    App,
+    Command,
+    Editor,
+    MarkdownView,
+    Menu,
+    Notice,
+    Plugin,
+    PluginManifest,
+    setIcon,
+    setTooltip,
+} from "obsidian";
 import { EditorView } from "@codemirror/view";
 import { ChangeSpec, StateEffect } from "@codemirror/state";
 import { endpointFromUrl, LTOptions, LTSettings, LTSettingsTab, SUGGESTIONS } from "./settings";
-import * as api from "api";
+import * as api from "./api";
 import { underlineExtension } from "./editor/extension";
 import {
     addUnderline,
@@ -14,24 +25,9 @@ import {
 import { cmpIgnoreCase, setDifference, setIntersect, setUnion } from "./helpers";
 import * as markdown from "./markdown/parser";
 
-class LTPluginSettings extends LTSettings {
-    private plugin: Plugin;
-    constructor(plugin: Plugin) {
-        super();
-        this.plugin = plugin;
-    }
-    protected loadOptions(): Promise<LTOptions> {
-        return this.plugin.loadData();
-    }
-    protected save(options: LTOptions): Promise<void> {
-        console.debug("Saving settings", options);
-        return this.plugin.saveData(options);
-    }
-}
-
 export default class LanguageToolPlugin extends Plugin {
-    public settings: LTPluginSettings = new LTPluginSettings(this);
-    private statusBarItem: HTMLElement;
+    public settings: LTSettings;
+    private statusBarItem?: HTMLElement;
 
     private isLoading = false;
 
@@ -41,11 +37,17 @@ export default class LanguageToolPlugin extends Plugin {
     // Used to temporarily disable auto-checking errors
     public autoCheckSuppressErrorsUntil: number = 0;
 
+    constructor(app: App, manifest: PluginManifest) {
+        super(app, manifest);
+
+        this.settingTab = new LTSettingsTab(this.app, this);
+        this.settings = new LTSettings(this.settingTab);
+    }
+
     public async onload(): Promise<void> {
         // Settings
         await this.settings.load();
-
-        this.settingTab = new LTSettingsTab(this.app, this);
+        await this.settingTab.load();
         this.addSettingTab(this.settingTab);
 
         // Status bar
@@ -362,9 +364,8 @@ export default class LanguageToolPlugin extends Plugin {
                     subItem.setTitle("Disable rule");
                     subItem.setIcon("circle-off");
                     subItem.onClick(async () => {
-                        let disabledRules = this.settings.options.disabledRules;
-                        if (disabledRules) disabledRules += "," + match.ruleId;
-                        else disabledRules = match.ruleId;
+                        let disabledRules = [...this.settings.options.disabledRules, match.ruleId];
+                        disabledRules.sort(cmpIgnoreCase);
                         await this.settings.update({ disabledRules });
 
                         editor.dispatch({
@@ -438,17 +439,19 @@ export default class LanguageToolPlugin extends Plugin {
 
     public setStatusBarReady() {
         this.isLoading = false;
-        setIcon(this.statusBarItem, "spell-check");
+        if (this.statusBarItem) setIcon(this.statusBarItem, "spell-check");
     }
 
     public setStatusBarWorking() {
         if (this.isLoading) return;
 
         this.isLoading = true;
-        setIcon(this.statusBarItem, "sync-small");
+        if (this.statusBarItem) setIcon(this.statusBarItem, "sync-small");
     }
 
     private handleStatusBarClick() {
+        if (!this.statusBarItem) return;
+
         const statusBarRect = this.statusBarItem.getBoundingClientRect();
         const statusBarIconRect = this.statusBarItem.getBoundingClientRect();
 
@@ -517,9 +520,12 @@ export default class LanguageToolPlugin extends Plugin {
             if (typeof picky === "boolean") settings.pickyMode = picky;
             if (Array.isArray(dictionary)) settings.dictionary = dictionary;
             if (Array.isArray(disabledRules) && disabledRules.length)
-                settings.disabledRules += "," + disabledRules.join(",");
+                settings.disabledRules = [...settings.disabledRules, ...disabledRules];
             if (Array.isArray(disabledCategories) && disabledCategories.length)
-                settings.disabledCategories += "," + disabledCategories.join(",");
+                settings.disabledCategories = [
+                    ...settings.disabledCategories,
+                    ...disabledCategories,
+                ];
             return settings;
         }
         /* eslint-enable @typescript-eslint/no-unsafe-assignment */
@@ -642,7 +648,6 @@ export default class LanguageToolPlugin extends Plugin {
 
     public async onExternalSettingsChange() {
         await this.settings.load();
-        await this.settingTab.notifyEndpointChange(this.settings.options);
     }
 
     /**

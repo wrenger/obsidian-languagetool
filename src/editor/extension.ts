@@ -1,4 +1,4 @@
-import LanguageToolPlugin from "main";
+import LanguageToolPlugin from "../main";
 import { autoCheckListener } from "./autoCheck";
 import { underlineDecoration } from "./underlines";
 import { Extension } from "@codemirror/state";

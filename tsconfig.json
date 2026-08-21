@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "baseUrl": "src",
+    "skipLibCheck": true,
     "sourceMap": true,
     "inlineSourceMap": false,
     "inlineSources": true,

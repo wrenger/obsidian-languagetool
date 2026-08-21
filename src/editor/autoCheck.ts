@@ -1,6 +1,6 @@
 import { Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import LanguageToolPlugin from "main";
+import LanguageToolPlugin from "../main";
 import { Notice } from "obsidian";
 
 export function autoCheckListener(plugin: LanguageToolPlugin): Extension {

@@ -1,7 +1,7 @@
 import { EditorView, Decoration, DecorationSet } from "@codemirror/view";
 import { StateField, StateEffect } from "@codemirror/state";
 import { categoryCssClass } from "../helpers";
-import * as api from "api";
+import * as api from "../api";
 
 export const ignoreListRegEx = /(frontmatter|code|math|templater|blockid|hashtag)/;
 

@@ -46,17 +46,19 @@ export async function check(
 
     if (settings.motherTongue) params.motherTongue = settings.motherTongue;
 
-    if (settings.enabledCategories) params.enabledCategories = settings.enabledCategories;
-    if (settings.disabledCategories) params.disabledCategories = settings.disabledCategories;
+    if (settings.enabledCategories.length)
+        params.enabledCategories = settings.enabledCategories.join(",");
+    if (settings.disabledCategories.length)
+        params.disabledCategories = settings.disabledCategories.join(",");
 
-    if (settings.enabledRules) params.enabledRules = settings.enabledRules;
-    if (settings.disabledRules) params.disabledRules = settings.disabledRules;
+    if (settings.enabledRules.length) params.enabledRules = settings.enabledRules.join(",");
+    if (settings.disabledRules.length) params.disabledRules = settings.disabledRules.join(",");
 
     if (lang == "auto")
         params.preferredVariants = Object.values(settings.languageVariety).join(",");
 
     const endpointType = endpointFromUrl(settings.serverUrl);
-    if (endpointType !== "standard" && settings.apikey && settings.username) {
+    if (endpointType !== "public" && settings.apikey && settings.username) {
         params.username = settings.username;
         params.apiKey = settings.apikey;
     }
@@ -164,11 +166,13 @@ export async function wordsDel(settings: Readonly<LTOptions>, word: string): Pro
 }
 
 export interface SynonymApi {
+    name: string;
     url: string;
     query: (sentence: string, selection: { from: number; to: number }) => Promise<string[]>;
 }
 
 class SynonymEn implements SynonymApi {
+    name = "English";
     url = "https://qb-grammar-en.languagetool.org/phrasal-paraphraser/subscribe";
     async query(sentence: string, selection: { from: number; to: number }): Promise<string[]> {
         const index = sentence.slice(0, selection.from).split(/\s+/).length;
@@ -202,6 +206,7 @@ class SynonymEn implements SynonymApi {
 }
 
 class SynonymDe implements SynonymApi {
+    name = "Deutsch";
     url = "https://synonyms.languagetool.org/synonyms/de";
     async query(sentence: string, selection: { from: number; to: number }): Promise<string[]> {
         const word = sentence.slice(selection.from, selection.to).trim();
@@ -222,10 +227,7 @@ class SynonymDe implements SynonymApi {
     }
 }
 
-export const SYNONYMS: { [key: string]: SynonymApi | undefined } = {
-    en: new SynonymEn(),
-    de: new SynonymDe(),
-};
+export const SYNONYMS: { [key: string]: SynonymApi } = { en: new SynonymEn(), de: new SynonymDe() };
 
 async function requestUrlChecked(request: RequestUrlParam): Promise<RequestUrlResponse> {
     let response: RequestUrlResponse;
