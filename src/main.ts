@@ -640,7 +640,7 @@ export default class LanguageToolPlugin extends Plugin {
         const debugString =
             `${new Date().toLocaleString()}:\n` +
             `Error: '${e.message}'\n` +
-            `Settings: ${JSON.stringify({ ...this.settings, username: "REDACTED", apikey: "REDACTED" })}\n`;
+            `Settings: ${JSON.stringify({ ...this.settings.options, username: "REDACTED", apikey: "REDACTED" })}\n`;
 
         this.logs.push(debugString);
         if (this.logs.length > 10) this.logs.shift();

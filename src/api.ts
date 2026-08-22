@@ -36,7 +36,7 @@ export async function check(
 ): Promise<LTLint[]> {
     const data = annotated.stringify();
 
-    const lang = settings.staticLanguage ?? "auto";
+    const lang = settings.staticLanguage || "auto";
     const params: { [key: string]: string } = {
         data,
         language: lang,

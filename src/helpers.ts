@@ -37,8 +37,6 @@ export function setIntersect<T>(setA: Set<T>, setB: Set<T>): Set<T> {
     return intersection;
 }
 
-export function cmpIgnoreCase(a: string, b: string): -1 | 0 | 1 {
-    a = a.toLowerCase();
-    b = b.toLowerCase();
-    return a > b ? 1 : a < b ? -1 : 0;
+export function cmpIgnoreCase(a: string, b: string): number {
+    return a.localeCompare(b);
 }

@@ -43,12 +43,14 @@ export const MOTHER_TONGUES: Record<string, string> = {
  * Unfortunately LanguageTool API does not provide a list of supported mother language varieties,
  * so we hardcode the ones from https://languagetool.org/editor/settings/language.
  */
-
-export const LANGUAGE_VARIETIES: Record<
-    string,
-    { name: string; variants: Record<string, string> }
-> = {
-    en: {
+interface LanguageVariety {
+    code: string;
+    name: string;
+    variants: Record<string, string>;
+}
+export const LANGUAGE_VARIETIES: LanguageVariety[] = [
+    {
+        code: "en",
         name: "English",
         variants: {
             "en-US": "English (US)",
@@ -59,7 +61,8 @@ export const LANGUAGE_VARIETIES: Record<
             "en-NZ": "English (New Zealand)",
         },
     },
-    de: {
+    {
+        code: "de",
         name: "German",
         variants: {
             "de-DE": "German (Germany)",
@@ -67,7 +70,8 @@ export const LANGUAGE_VARIETIES: Record<
             "de-CH": "German (Switzerland)",
         },
     },
-    pt: {
+    {
+        code: "pt",
         name: "Portuguese",
         variants: {
             "pt-BR": "Portuguese (Brazil)",
@@ -76,11 +80,12 @@ export const LANGUAGE_VARIETIES: Record<
             "pt-MZ": "Portuguese (Mozambique)",
         },
     },
-    ca: {
+    {
+        code: "ca",
         name: "Catalan",
         variants: { "ca-ES": "Catalan", "ca-ES-valencia": "Catalan (Valencian)" },
     },
-};
+];
 
 export class Endpoint {
     url: string;
@@ -178,18 +183,17 @@ export class LTSettings {
         }
 
         // Migration: categories and rules
-        if (typeof data.enabledCategories === "string" && data.enabledCategories)
-            data = { ...data, enabledCategories: data.enabledCategories.split(",") };
-        if (data.enabledCategories) data.enabledCategories.sort(cmpIgnoreCase);
-        if (typeof data.disabledCategories === "string" && data.disabledCategories)
-            data = { ...data, disabledCategories: data.disabledCategories.split(",") };
-        if (data.disabledCategories) data.disabledCategories.sort(cmpIgnoreCase);
-        if (typeof data.enabledRules === "string" && data.enabledRules)
-            data = { ...data, enabledRules: data.enabledRules.split(",") };
-        if (data.enabledRules) data.enabledRules.sort(cmpIgnoreCase);
-        if (typeof data.disabledRules === "string" && data.disabledRules)
-            data = { ...data, disabledRules: data.disabledRules.split(",") };
-        if (data.disabledRules) data.disabledRules.sort(cmpIgnoreCase);
+        let parseList = (data: any, key: string) => {
+            if (typeof data[key] === "string" && data[key])
+                data = { ...data, [key]: data[key].split(",") };
+            if (!Array.isArray(data[key])) data[key] = [];
+            data[key] = data[key].filter(Boolean);
+            return data;
+        };
+        data = parseList(data, "enabledCategories");
+        data = parseList(data, "disabledCategories");
+        data = parseList(data, "enabledRules");
+        data = parseList(data, "disabledRules");
 
         return data;
     }
@@ -237,7 +241,7 @@ export const DEFAULT_SETTINGS: LTOptions = {
     motherTongue: "",
     staticLanguage: "",
     languageVariety: Object.fromEntries(
-        Object.entries(LANGUAGE_VARIETIES).map(([k, v]) => [k, Object.keys(v.variants)[0]]),
+        LANGUAGE_VARIETIES.map(v => [v.code, Object.keys(v.variants)[0]]),
     ),
     dictionary: [],
     syncDictionary: false,
@@ -464,12 +468,10 @@ export class LTSettingsTab extends PluginSettingTab {
                 control: {
                     type: "dropdown",
                     key: "synonyms",
-                    options: {
-                        "": "Disabled",
-                        ...Object.fromEntries(
-                            Object.entries(api.SYNONYMS).map(([k, v]) => [k, v?.name]),
-                        ),
-                    },
+                    options: Object.fromEntries([
+                        ["", "Disabled"],
+                        ...Object.entries(api.SYNONYMS).map(([k, v]) => [k, v?.name]),
+                    ]),
                 },
             },
             {
@@ -497,12 +499,10 @@ export class LTSettingsTab extends PluginSettingTab {
                                         v.longCode !== v.code ||
                                         this.languages.filter(l => l.code == v.code).length <= 1,
                                 );
-                                return {
-                                    "": "Auto detect",
-                                    ...Object.fromEntries(
-                                        staticLang.map(v => [v.longCode, v.name]),
-                                    ),
-                                };
+                                return Object.fromEntries([
+                                    ["", "Auto detect"],
+                                    ...staticLang.map(v => [v.longCode, v.name]),
+                                ]);
                             })(),
                         },
                     },
@@ -518,17 +518,14 @@ export class LTSettingsTab extends PluginSettingTab {
                                 'When "Auto detect" is active, these languages will be interpreted as the following variant.',
                             );
                         }),
-                        items: Object.entries(LANGUAGE_VARIETIES).map(
-                            ([code, { name, variants }]) => ({
-                                name: `Interpret ${name} as`,
-                                control: {
-                                    type: "dropdown" as const,
-                                    key: `languageVariety.${code}`,
-                                    options: variants,
-                                },
-                            }),
-                        ),
-                        visible: () => !settings.options.staticLanguage,
+                        items: LANGUAGE_VARIETIES.map(({ code, name, variants }) => ({
+                            name: `Interpret ${name} as`,
+                            control: {
+                                type: "dropdown" as const,
+                                key: `languageVariety.${code}`,
+                                options: variants,
+                            },
+                        })),
                     },
                     {
                         name: "Mother tongue",
