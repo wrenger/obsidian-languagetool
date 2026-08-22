@@ -151,7 +151,7 @@ export class LTSettings {
         if (newOptions.endpoint != null || newOptions.serverUrl != null) {
             // reload languages
             console.debug("Endpoint reload:", newOptions.endpoint);
-            this.tab.load();
+            await this.tab.load();
         }
         if (newOptions.injectProperties != null) {
             this.tab.plugin.injectProperties(newOptions.injectProperties);
@@ -362,11 +362,15 @@ export class LTSettingsTab extends PluginSettingTab {
                             v => {
                                 const newVals = new Set(values);
                                 newVals.add(v);
-                                this.plugin.settings.update({
-                                    [key]: [...newVals].sort(cmpIgnoreCase),
-                                });
-                                this.update();
-                                onUpdate?.();
+                                this.plugin.settings
+                                    .update({ [key]: [...newVals].sort(cmpIgnoreCase) })
+                                    .then(
+                                        () => {
+                                            this.update();
+                                            onUpdate?.();
+                                        },
+                                        e => console.error("Failed to update settings", e),
+                                    );
                             },
                             validate,
                         );
@@ -376,9 +380,13 @@ export class LTSettingsTab extends PluginSettingTab {
                 onDelete: index => {
                     const copy = [...values];
                     copy.splice(index, 1);
-                    this.plugin.settings.update({ [key]: copy });
-                    this.update();
-                    onUpdate?.();
+                    this.plugin.settings.update({ [key]: copy }).then(
+                        () => {
+                            this.update();
+                            onUpdate?.();
+                        },
+                        e => console.error("Failed to update settings", e),
+                    );
                 },
             };
         };
