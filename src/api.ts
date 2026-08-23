@@ -2,6 +2,7 @@ import { endpointFromUrl, LTOptions } from "./settings";
 import { RequestUrlParam, RequestUrlResponse, requestUrl } from "obsidian";
 import { JSONPath } from "jsonpath-plus";
 import { AnnotatedText } from "./annotated";
+import { errorMessage } from "./helpers";
 
 /** LanguageTool Check API: https://languagetool.org/http-api/swagger-ui */
 
@@ -121,7 +122,7 @@ export async function words(settings: Readonly<LTOptions>): Promise<string[]> {
         ).json as JsonValue;
         return jsonPathA<string>("$.words[*]@string()", res);
     } catch (e) {
-        throw new Error(`Requesting words failed\n${e}`);
+        throw new Error(`Requesting words failed\n${errorMessage(e)}`, { cause: e });
     }
 }
 export async function wordsAdd(settings: Readonly<LTOptions>, word: string): Promise<boolean> {
@@ -141,7 +142,7 @@ export async function wordsAdd(settings: Readonly<LTOptions>, word: string): Pro
         ).json as JsonValue;
         return jsonPath<boolean>("$.added@boolean()", res);
     } catch (e) {
-        throw new Error(`Adding words failed\n${e}`);
+        throw new Error(`Adding words failed\n${errorMessage(e)}`, { cause: e });
     }
 }
 export async function wordsDel(settings: Readonly<LTOptions>, word: string): Promise<boolean> {
@@ -161,7 +162,7 @@ export async function wordsDel(settings: Readonly<LTOptions>, word: string): Pro
         ).json as JsonValue;
         return jsonPath<boolean>("$.deleted@boolean()", res);
     } catch (e) {
-        throw new Error(`Deleting words failed\n${e}`);
+        throw new Error(`Deleting words failed\n${errorMessage(e)}`, { cause: e });
     }
 }
 
@@ -200,7 +201,7 @@ class SynonymEn implements SynonymApi {
             ).json as JsonValue;
             return jsonPathA<string>("$.data.suggestions[*][*]@string()", res);
         } catch (e) {
-            throw new Error(`Requesting synonyms failed\n${e}`);
+            throw new Error(`Requesting synonyms failed\n${errorMessage(e)}`, { cause: e });
         }
     }
 }
@@ -222,7 +223,7 @@ class SynonymDe implements SynonymApi {
             ).json as JsonValue;
             return jsonPathA<string>("$.synsets[*].terms[*].term@string()", res);
         } catch (e) {
-            throw new Error(`Requesting synonyms failed\n${e}`);
+            throw new Error(`Requesting synonyms failed\n${errorMessage(e)}`, { cause: e });
         }
     }
 }
@@ -235,7 +236,8 @@ async function requestUrlChecked(request: RequestUrlParam): Promise<RequestUrlRe
         response = await requestUrl({ ...request, throw: false });
     } catch (e) {
         throw new Error(
-            `Request to LanguageTool failed: Please check your connection and server URL.\n${e}`,
+            `Request to LanguageTool failed: Please check your connection and server URL.\n${errorMessage(e)}`,
+            { cause: e },
         );
     }
     if (response.status === 504 || response.status === 503)

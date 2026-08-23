@@ -236,7 +236,8 @@ function addText(text: string, output: AnnotatedText) {
 
 function addLines(text: string, parsed: string, output: AnnotatedText) {
     const [first, ...reminder] = text.replace(/\n$/, "").split("\n");
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    // The first parsed line is intentionally unused; only the remaining lines are compared.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- pfirst is needed to collect premider.
     const [pfirst, ...premider] = parsed.replace(/\n$/, "").split("\n");
 
     if (reminder.length !== premider.length) {
@@ -251,7 +252,8 @@ function addLines(text: string, parsed: string, output: AnnotatedText) {
         const pline = premider[i];
 
         let indent = line.length - pline.length;
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        // The match value is intentionally unused; each match represents one escape character.
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars -- only the match count affects indent.
         for (const m of line.matchAll(ESCAPE)) {
             indent -= 1; // each escape character is one longer
         }

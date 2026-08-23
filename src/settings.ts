@@ -170,24 +170,27 @@ export class LTSettings {
         this._options = { ...DEFAULT_SETTINGS, ...options };
     }
 
-    protected async loadOptions(): Promise<LTOptions> {
-        let data = (await this.tab.plugin.loadData()) ?? {};
+    protected async loadOptions(): Promise<Partial<LTOptions>> {
+        let data = ((await this.tab.plugin.loadData()) ?? {}) as Record<string, unknown>;
 
         // Migration: endpoint
         if (!("endpoint" in data)) {
             // Determine endpoint based on serverUrl
-            const endpoint = data.serverUrl
-                ? endpointFromUrl(data.serverUrl)
-                : DEFAULT_SETTINGS.endpoint;
+            const endpoint =
+                typeof data.serverUrl === "string"
+                    ? endpointFromUrl(data.serverUrl)
+                    : DEFAULT_SETTINGS.endpoint;
             data = { ...data, endpoint: endpoint };
         }
 
         // Migration: categories and rules
-        let parseList = (data: any, key: string) => {
+        let parseList = (data: Record<string, unknown>, key: string) => {
             if (typeof data[key] === "string" && data[key])
                 data = { ...data, [key]: data[key].split(",") };
-            if (!Array.isArray(data[key])) data[key] = [];
-            data[key] = data[key].filter(Boolean);
+
+            let value = data[key];
+            if (Array.isArray(value)) data[key] = value.filter(Boolean);
+            else data[key] = [];
             return data;
         };
         data = parseList(data, "enabledCategories");
@@ -318,7 +321,10 @@ export class LTSettingsTab extends PluginSettingTab {
             const lang = key.split(".")[1];
             return this.plugin.settings.options.languageVariety?.[lang];
         }
-        return (this.plugin.settings.options as any)[key];
+        if (key in this.plugin.settings.options) {
+            return (this.plugin.settings.options as Readonly<Record<string, unknown>>)[key];
+        }
+        return undefined;
     }
 
     async setControlValue(key: string, value: unknown): Promise<void> {
@@ -421,7 +427,9 @@ export class LTSettingsTab extends PluginSettingTab {
                             console.debug("Languages", languages);
                             return undefined;
                         } catch (e) {
-                            return "Cannot connect to server";
+                            let message = "";
+                            if (e instanceof Error) message = e.message;
+                            return "Cannot connect to server" + (message ? `: ${message}` : "");
                         }
                     },
                 },
@@ -479,7 +487,7 @@ export class LTSettingsTab extends PluginSettingTab {
                     options: Object.fromEntries([
                         ["", "Disabled"],
                         ...Object.entries(api.SYNONYMS).map(([k, v]) => [k, v?.name]),
-                    ]),
+                    ]) as Record<string, string>,
                 },
             },
             {
@@ -510,7 +518,7 @@ export class LTSettingsTab extends PluginSettingTab {
                                 return Object.fromEntries([
                                     ["", "Auto detect"],
                                     ...staticLang.map(v => [v.longCode, v.name]),
-                                ]);
+                                ]) as Record<string, string>;
                             })(),
                         },
                     },
@@ -619,9 +627,11 @@ export class LTSettingsTab extends PluginSettingTab {
                     {
                         name: "Copy error logs to clipboard",
                         desc: `${this.plugin.logs.length} messages`,
-                        action: async () => {
-                            await window.navigator.clipboard.writeText(this.plugin.logs.join("\n"));
-                            new Notice("Logs copied to clipboard");
+                        action: () => {
+                            window.navigator.clipboard.writeText(this.plugin.logs.join("\n")).then(
+                                () => new Notice("Logs copied to clipboard"),
+                                () => new Notice("Failed to copy logs to clipboard"),
+                            );
                         },
                     },
                 ],

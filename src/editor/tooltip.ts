@@ -16,8 +16,9 @@ function createTooltip(
     const replacements = match.replacements.slice(0, SUGGESTIONS / 2);
     const category = match.categoryId;
     const ruleId = match.ruleId;
+    const categoryClass = categoryCssClass(category, ruleId);
 
-    return createDiv({ cls: ["lt-tooltip", categoryCssClass(category)] }, root => {
+    return createDiv({ cls: ["lt-tooltip", categoryClass] }, root => {
         if (match.title) root.createSpan({ cls: "lt-title", text: match.title });
         if (match.message) root.createSpan({ cls: "lt-message", text: match.message });
 
@@ -37,7 +38,7 @@ function createTooltip(
         });
 
         root.createDiv({ cls: "lt-ignore-container" }, container => {
-            if (category === "TYPOS") {
+            if (categoryClass === "lt-major") {
                 container.createDiv({ cls: "lt-ignore-btn" }, button => {
                     setIcon(button.createSpan(), "plus-with-circle");
                     button.createSpan({ text: "Add to dictionary" });
@@ -129,7 +130,6 @@ function lintTooltip(
 }
 
 export function buildHoverTooltip(plugin: LanguageToolPlugin): Extension {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
     return hoverTooltip(lintTooltip.bind(null, plugin), { hideOnChange: true });
 }
 

@@ -504,31 +504,39 @@ export default class LanguageToolPlugin extends Plugin {
         const file = this.app.workspace.getActiveFile();
         const cache = file && this.app.metadataCache.getFileCache(file);
 
-        /* eslint-disable @typescript-eslint/no-unsafe-assignment */
+        // /* eslint-disable @typescript-eslint/no-unsafe-assignment */
         if (cache?.frontmatter != null) {
-            const language = cache.frontmatter["lt-language"] ?? cache.frontmatter["lt_language"];
-            const picky = cache.frontmatter["lt-picky"];
-            const autoCheck = cache.frontmatter["lt-autoCheck"];
-            const dictionary = cache.frontmatter["lt-dictionary"];
-            const disabledRules = cache.frontmatter["lt-disabledRules"];
-            const disabledCategories = cache.frontmatter["lt-disabledCategories"];
+            const language: unknown =
+                cache.frontmatter["lt-language"] ?? cache.frontmatter["lt_language"];
+            const picky: unknown = cache.frontmatter["lt-picky"];
+            const autoCheck: unknown = cache.frontmatter["lt-autoCheck"];
+            const dictionary: unknown = cache.frontmatter["lt-dictionary"];
+            const disabledRules: unknown = cache.frontmatter["lt-disabledRules"];
+            const disabledCategories: unknown = cache.frontmatter["lt-disabledCategories"];
 
             // Beware: shallow clone
             let settings = { ...this.settings.options };
             if (typeof language === "string") settings.staticLanguage = language;
             if (typeof autoCheck === "boolean") settings.shouldAutoCheck = autoCheck;
             if (typeof picky === "boolean") settings.pickyMode = picky;
-            if (Array.isArray(dictionary)) settings.dictionary = dictionary;
-            if (Array.isArray(disabledRules) && disabledRules.length)
+            if (Array.isArray(dictionary) && dictionary.every(item => typeof item === "string"))
+                settings.dictionary = dictionary;
+            if (
+                Array.isArray(disabledRules) &&
+                disabledRules.every(item => typeof item === "string")
+            )
                 settings.disabledRules = [...settings.disabledRules, ...disabledRules];
-            if (Array.isArray(disabledCategories) && disabledCategories.length)
+            if (
+                Array.isArray(disabledCategories) &&
+                disabledCategories.every(item => typeof item === "string")
+            )
                 settings.disabledCategories = [
                     ...settings.disabledCategories,
                     ...disabledCategories,
                 ];
             return settings;
         }
-        /* eslint-enable @typescript-eslint/no-unsafe-assignment */
+        // /* eslint-enable @typescript-eslint/no-unsafe-assignment */
         return this.settings.options;
     }
 

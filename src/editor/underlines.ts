@@ -47,7 +47,7 @@ export const underlineDecoration = StateField.define<DecorationSet>({
                 underlines = underlines.update({
                     add: [
                         Decoration.mark({
-                            class: `lt-underline ${categoryCssClass(underline.categoryId)}`,
+                            class: `lt-underline ${categoryCssClass(underline.categoryId, underline.ruleId)}`,
                             underline,
                         }).range(range.from, range.to),
                     ],
