@@ -179,6 +179,8 @@ export class LTSettings {
     protected async loadOptions(): Promise<Partial<LTOptions>> {
         let data = ((await this.tab.plugin.loadData()) ?? {}) as Record<string, unknown>;
 
+        let snapshot = JSON.stringify(data);
+
         // Migration: endpoint
         if (!("endpoint" in data)) {
             // Determine endpoint based on serverUrl
@@ -212,10 +214,16 @@ export class LTSettings {
         }
         if (!data.apikeySecret) data.apikeySecret = "";
 
+        // Save if options were migrated
+        if (snapshot !== JSON.stringify(data)) {
+            await this.tab.plugin.saveData({ ...DEFAULT_SETTINGS, ...data });
+        }
+
         return data;
     }
 
     protected async save(options: LTOptions): Promise<void> {
+        console.debug("saving language tool settings");
         await this.tab.plugin.saveData(options);
     }
 }
