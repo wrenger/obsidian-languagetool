@@ -31,41 +31,41 @@ type JsonValue = string | number | boolean | { [x: string]: JsonValue } | JsonVa
  * The main function of LanguageTool, checking text for spell/grammar errors.
  */
 export async function check(
-    settings: Readonly<LTOptions>,
+    options: Readonly<LTOptions>,
+    apiKey: string | null,
     offset: number,
     annotated: AnnotatedText,
 ): Promise<LTLint[]> {
     const data = annotated.stringify();
 
-    const lang = settings.staticLanguage || "auto";
+    const lang = options.staticLanguage || "auto";
     const params: { [key: string]: string } = {
         data,
         language: lang,
         enabledOnly: "false",
-        level: settings.pickyMode ? "picky" : "default",
+        level: options.pickyMode ? "picky" : "default",
     };
 
-    if (settings.motherTongue) params.motherTongue = settings.motherTongue;
+    if (options.motherTongue) params.motherTongue = options.motherTongue;
 
-    if (settings.enabledCategories.length)
-        params.enabledCategories = settings.enabledCategories.join(",");
-    if (settings.disabledCategories.length)
-        params.disabledCategories = settings.disabledCategories.join(",");
+    if (options.enabledCategories.length)
+        params.enabledCategories = options.enabledCategories.join(",");
+    if (options.disabledCategories.length)
+        params.disabledCategories = options.disabledCategories.join(",");
 
-    if (settings.enabledRules.length) params.enabledRules = settings.enabledRules.join(",");
-    if (settings.disabledRules.length) params.disabledRules = settings.disabledRules.join(",");
+    if (options.enabledRules.length) params.enabledRules = options.enabledRules.join(",");
+    if (options.disabledRules.length) params.disabledRules = options.disabledRules.join(",");
 
-    if (lang == "auto")
-        params.preferredVariants = Object.values(settings.languageVariety).join(",");
+    if (lang == "auto") params.preferredVariants = Object.values(options.languageVariety).join(",");
 
-    const endpointType = endpointFromUrl(settings.serverUrl);
-    if (endpointType !== "public" && settings.apikey && settings.username) {
-        params.username = settings.username;
-        params.apiKey = settings.apikey;
+    const endpointType = endpointFromUrl(options.serverUrl);
+    if (endpointType !== "public" && apiKey && options.username) {
+        params.username = options.username;
+        params.apiKey = apiKey;
     }
 
     const res = await requestUrlChecked({
-        url: `${settings.serverUrl}/v2/check`,
+        url: `${options.serverUrl}/v2/check`,
         method: "POST",
         body: new URLSearchParams(params).toString(),
         headers: {
@@ -106,16 +106,19 @@ export async function languages(serverUrl: string): Promise<Language[]> {
     return languages as Language[];
 }
 
-export async function words(settings: Readonly<LTOptions>): Promise<string[]> {
-    if (settings.username == null || settings.apikey == null)
+export async function words(
+    options: Readonly<LTOptions>,
+    apiKey: string | null,
+): Promise<string[]> {
+    if (options.username == null || apiKey == null)
         throw Error(`Syncing words is only supported for premium users`);
 
     try {
         const res = (
             await requestUrlChecked({
-                url: sUrl(`${settings.serverUrl}/v2/words`, {
-                    username: settings.username,
-                    apiKey: settings.apikey,
+                url: sUrl(`${options.serverUrl}/v2/words`, {
+                    username: options.username,
+                    apiKey: apiKey,
                     limit: "1000",
                 }).href,
             })
@@ -125,16 +128,20 @@ export async function words(settings: Readonly<LTOptions>): Promise<string[]> {
         throw new Error(`Requesting words failed\n${errorMessage(e)}`, { cause: e });
     }
 }
-export async function wordsAdd(settings: Readonly<LTOptions>, word: string): Promise<boolean> {
-    if (settings.username == null || settings.apikey == null)
+export async function wordsAdd(
+    options: Readonly<LTOptions>,
+    apiKey: string | null,
+    word: string,
+): Promise<boolean> {
+    if (options.username == null || apiKey == null)
         throw Error(`Syncing words is only supported for premium users`);
 
     try {
         const res = (
             await requestUrlChecked({
-                url: sUrl(`${settings.serverUrl}/v2/words/add`, {
-                    username: settings.username,
-                    apiKey: settings.apikey,
+                url: sUrl(`${options.serverUrl}/v2/words/add`, {
+                    username: options.username,
+                    apiKey: apiKey,
                     word,
                 }).href,
                 method: "POST",
@@ -145,16 +152,20 @@ export async function wordsAdd(settings: Readonly<LTOptions>, word: string): Pro
         throw new Error(`Adding words failed\n${errorMessage(e)}`, { cause: e });
     }
 }
-export async function wordsDel(settings: Readonly<LTOptions>, word: string): Promise<boolean> {
-    if (settings.username == null || settings.apikey == null)
+export async function wordsDel(
+    options: Readonly<LTOptions>,
+    apiKey: string | null,
+    word: string,
+): Promise<boolean> {
+    if (options.username == null || apiKey == null)
         throw Error(`Syncing words is only supported for premium users`);
 
     try {
         const res = (
             await requestUrlChecked({
-                url: sUrl(`${settings.serverUrl}/v2/words/delete`, {
-                    username: settings.username,
-                    apiKey: settings.apikey,
+                url: sUrl(`${options.serverUrl}/v2/words/delete`, {
+                    username: options.username,
+                    apiKey: apiKey,
                     word,
                 }).href,
                 method: "POST",

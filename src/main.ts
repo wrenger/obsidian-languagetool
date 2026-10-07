@@ -577,7 +577,7 @@ export default class LanguageToolPlugin extends Plugin {
             console.debug(`Checking ${annotations.length()} characters...`);
             // console.debug("Text", JSON.stringify(annotations, undefined, "  "));
 
-            matches = await api.check(settings, offset, annotations);
+            matches = await api.check(settings, this.settings.getApiKey(), offset, annotations);
             // update range to the checked text
             if (range) range = { from: offset, to: offset + annotations.length() };
         } catch (e) {
@@ -674,13 +674,15 @@ export default class LanguageToolPlugin extends Plugin {
         try {
             const lastWords = new Set(this.settings.options.remoteDictionary);
             let localWords = new Set(this.settings.options.dictionary);
-            let remoteWords = new Set(await api.words(this.settings.options));
+            let remoteWords = new Set(
+                await api.words(this.settings.options, this.settings.getApiKey()),
+            );
 
             // words that have been removed locally
             let localRemoved = setDifference(lastWords, localWords);
             localRemoved = setIntersect(localRemoved, remoteWords);
             for (const word of localRemoved) {
-                await api.wordsDel(this.settings.options, word);
+                await api.wordsDel(this.settings.options, this.settings.getApiKey(), word);
             }
 
             // words that have been removed remotely
@@ -692,7 +694,7 @@ export default class LanguageToolPlugin extends Plugin {
             // words that have been added locally
             const missingRemote = setDifference(localWords, remoteWords);
             for (const word of missingRemote) {
-                await api.wordsAdd(this.settings.options, word);
+                await api.wordsAdd(this.settings.options, this.settings.getApiKey(), word);
             }
 
             // merge remaining words

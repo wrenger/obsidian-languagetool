@@ -283,5 +283,5 @@ function isBlock(node: RootContent): node is BlockContent {
         "paragraph",
         "table",
         "thematicBreak",
-    ].contains(node.type);
+    ].includes(node.type);
 }

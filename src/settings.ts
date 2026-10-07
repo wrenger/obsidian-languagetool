@@ -3,6 +3,7 @@ import {
     Modal,
     Notice,
     PluginSettingTab,
+    SecretComponent,
     Setting,
     SettingDefinitionItem,
     SettingDefinitionList,
@@ -13,6 +14,7 @@ import * as api from "./api";
 import { cmpIgnoreCase } from "./helpers";
 
 export const SUGGESTIONS = 8;
+const DEFAULT_SECRET_APIKEY = "languagetool-apikey";
 
 /**
  * Unfortunately LanguageTool API does not provide a list of supported mother tongues,
@@ -170,6 +172,10 @@ export class LTSettings {
         this._options = { ...DEFAULT_SETTINGS, ...options };
     }
 
+    public getApiKey(): string | null {
+        return this.tab.app.secretStorage.getSecret(this.options.apikeySecret);
+    }
+
     protected async loadOptions(): Promise<Partial<LTOptions>> {
         let data = ((await this.tab.plugin.loadData()) ?? {}) as Record<string, unknown>;
 
@@ -198,6 +204,14 @@ export class LTSettings {
         data = parseList(data, "enabledRules");
         data = parseList(data, "disabledRules");
 
+        // Migration: api key into secret storage
+        if ("apikey" in data && typeof data.apikey === "string") {
+            this.tab.app.secretStorage.setSecret(DEFAULT_SECRET_APIKEY, data.apikey);
+            data.apikeySecret = DEFAULT_SECRET_APIKEY;
+            delete data.apikey;
+        }
+        if (!data.apikeySecret) data.apikeySecret = "";
+
         return data;
     }
 
@@ -209,7 +223,7 @@ export class LTSettings {
 export interface LTOptions {
     endpoint: EndpointType;
     serverUrl: string;
-    apikey?: string;
+    apikeySecret: string;
     username?: string;
 
     shouldAutoCheck: boolean;
@@ -238,6 +252,7 @@ export interface LTOptions {
 export const DEFAULT_SETTINGS: LTOptions = {
     endpoint: "public",
     serverUrl: endpoints["public"].url,
+    apikeySecret: "",
     autoCheckDelay: endpoints.public.minDelay,
     shouldAutoCheck: false,
     synonyms: "",
@@ -450,13 +465,14 @@ export class LTSettingsTab extends PluginSettingTab {
             },
             {
                 name: "API key",
-                control: {
-                    type: "text",
-                    key: "apikey",
-                    validate: (value: string) => {
-                        if (settings.options.endpoint === "premium" && !value)
-                            return "API key is required for premium endpoint";
-                    },
+                render: (setting, group) => {
+                    setting.addComponent(el =>
+                        new SecretComponent(this.app, el)
+                            .setValue(settings.options.apikeySecret)
+                            .onChange(async value => {
+                                await settings.update({ apikeySecret: value });
+                            }),
+                    );
                 },
                 visible: () => settings.options.endpoint !== "public",
             },
