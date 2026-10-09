@@ -5,6 +5,8 @@ import { gfm } from "micromark-extension-gfm";
 import { gfmFromMarkdown } from "mdast-util-gfm";
 import { frontmatter } from "micromark-extension-frontmatter";
 import { frontmatterFromMarkdown } from "mdast-util-frontmatter";
+import { math } from "micromark-extension-math";
+import { mathFromMarkdown } from "mdast-util-math";
 
 import { AnnotatedText } from "../annotated";
 import { wikiLink } from "./micromark-wikilink";
@@ -20,10 +22,11 @@ export class SyntaxTree {
     constructor(text: string) {
         this.#raw = text;
         this.#tree = fromMarkdown(text, {
-            extensions: [gfm(), frontmatter(["yaml"]), wikiLink({ aliasDivider: "|" })],
+            extensions: [gfm(), frontmatter(["yaml"]), math(), wikiLink({ aliasDivider: "|" })],
             mdastExtensions: [
                 gfmFromMarkdown(),
                 frontmatterFromMarkdown(["yaml"]),
+                mathFromMarkdown(),
                 wikiLinkFromMarkdown(),
             ],
         });
@@ -142,6 +145,8 @@ class AnnotationVisitor {
                 break;
             case "yaml":
             case "code":
+            case "math":
+            case "inlineMath":
             case "html":
             case "image":
             case "imageReference":
@@ -277,6 +282,7 @@ function isBlock(node: RootContent): node is BlockContent {
     return [
         "blockquote",
         "code",
+        "math",
         "heading",
         "html",
         "list",
