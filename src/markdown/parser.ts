@@ -63,6 +63,23 @@ export class SyntaxTree {
         }
         return this.#tree.children.some(child => visit(child));
     }
+
+    overlaps(from: number, to: number, nodeType: string): boolean {
+        if (from >= to) return false;
+
+        function visit(child: RootContent): boolean {
+            const startOffset = child?.position?.start.offset;
+            const endOffset = child?.position?.end.offset;
+            if (startOffset == null || endOffset == null) {
+                throw Error("Markdown parsing: unknown position for text node");
+            }
+            if (endOffset <= from || startOffset >= to) return false;
+            if (child.type === nodeType) return true;
+            return "children" in child && child.children.some(c => visit(c));
+        }
+
+        return this.#tree.children.some(child => visit(child));
+    }
 }
 
 class AnnotationVisitor {
@@ -166,7 +183,7 @@ class AnnotationVisitor {
                 this.output.pushMarkup("", "\n\n");
                 break;
             case "inlineCode":
-                this.output.pushMarkup(emptyMarkup(startOffset, endOffset), node.value);
+                this.output.pushMarkup(emptyMarkup(startOffset, endOffset));
                 this.offset = endOffset;
                 break;
             case "break":

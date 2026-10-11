@@ -87,6 +87,30 @@ test("excludes math", () => {
     ).toBe("Some math  after.End.");
 });
 
+test("excludes inline code and identifies overlapping matches", () => {
+    const input = "Before `/opt/vaultwarden/.env` after.";
+    const syntax = new SyntaxTree(input);
+    const { annotations } = syntax.annotate();
+    const codeStart = input.indexOf("`");
+    const codeEnd = input.lastIndexOf("`") + 1;
+
+    expect(annotations.length()).toBe(input.length);
+    expect(annotations.annotations).toContainEqual({
+        markup: " ".repeat(codeEnd - codeStart),
+        interpretAs: undefined,
+    });
+    expect(
+        annotations.annotations.some(annotation =>
+            "text" in annotation && annotation.text.includes("vaultwarden"),
+        ),
+    ).toBeFalse();
+
+    expect(syntax.overlaps(codeStart, codeEnd, "inlineCode")).toBeTrue();
+    expect(syntax.overlaps(codeStart - 1, codeEnd + 1, "inlineCode")).toBeTrue();
+    expect(syntax.overlaps(0, codeStart, "inlineCode")).toBeFalse();
+    expect(syntax.overlaps(codeEnd, input.length, "inlineCode")).toBeFalse();
+});
+
 describe("markdown samples", () => {
     // iterate over all files in the samples directory
     const files = readdirSync("test");

@@ -612,6 +612,9 @@ export default class LanguageToolPlugin extends Plugin {
             for (const match of matches) {
                 // Fixes a bug where the match is outside the document
                 if (match.range.to > editor.state.doc.length) continue;
+                // Masked inline code can still produce matches that span its whitespace.
+                if (syntax.overlaps(match.range.from, match.range.to, "inlineCode")) continue;
+
                 // Ignore typos that are in the spellcheck dictionary
                 if (match.categoryId === "TYPOS" && spellcheckDictionary.includes(match.text))
                     continue;
