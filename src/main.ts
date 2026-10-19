@@ -47,7 +47,8 @@ export default class LanguageToolPlugin extends Plugin {
     public async onload(): Promise<void> {
         // Settings
         await this.settings.load();
-        await this.settingTab.load();
+        // Fetch languages in the background: an unreachable server must not block startup
+        void this.settingTab.load();
         this.addSettingTab(this.settingTab);
 
         // Status bar
