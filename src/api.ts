@@ -98,8 +98,12 @@ export interface Language {
     longCode: string;
 }
 
+/// Short timeout, as this is called during startup.
+const LANG_TIMEOUT = 3000;
+
 export async function languages(serverUrl: string): Promise<Language[]> {
-    const languages = (await requestUrl({ url: `${serverUrl}/v2/languages` }).json) as JsonValue;
+    let res = await requestUrlChecked({ url: `${serverUrl}/v2/languages` }, LANG_TIMEOUT);
+    let languages = res.json as JsonValue;
     if (languages == null || !(languages instanceof Array))
         throw new Error(`Error processing response from LanguageTool.`);
     // @ts-expect-error, not typed
@@ -114,16 +118,23 @@ export async function words(
         throw Error(`Syncing words is only supported for premium users`);
 
     try {
-        const res = (
-            await requestUrlChecked({
-                url: sUrl(`${options.serverUrl}/v2/words`, {
-                    username: options.username,
-                    apiKey: apiKey,
-                    limit: "1000",
-                }).href,
-            })
-        ).json as JsonValue;
-        return jsonPathA<string>("$.words[*]@string()", res);
+        const limit = 1000;
+        const words: string[] = [];
+        for (let offset = 0; ; offset += limit) {
+            const res = (
+                await requestUrlChecked({
+                    url: sUrl(`${options.serverUrl}/v2/words`, {
+                        username: options.username,
+                        apiKey: apiKey,
+                        offset: String(offset),
+                        limit: String(limit),
+                    }).href,
+                })
+            ).json as JsonValue;
+            const page = jsonPathA<string>("$.words[*]@string()", res);
+            words.push(...page);
+            if (page.length < limit) return words;
+        }
     } catch (e) {
         throw new Error(`Requesting words failed\n${errorMessage(e)}`, { cause: e });
     }
@@ -138,14 +149,17 @@ export async function wordsAdd(
 
     try {
         const res = (
-            await requestUrlChecked({
-                url: sUrl(`${options.serverUrl}/v2/words/add`, {
-                    username: options.username,
-                    apiKey: apiKey,
-                    word,
-                }).href,
-                method: "POST",
-            })
+            await requestUrlChecked(
+                {
+                    url: sUrl(`${options.serverUrl}/v2/words/add`, {
+                        username: options.username,
+                        apiKey: apiKey,
+                        word,
+                    }).href,
+                    method: "POST",
+                },
+                null,
+            )
         ).json as JsonValue;
         return jsonPath<boolean>("$.added@boolean()", res);
     } catch (e) {
@@ -162,14 +176,17 @@ export async function wordsDel(
 
     try {
         const res = (
-            await requestUrlChecked({
-                url: sUrl(`${options.serverUrl}/v2/words/delete`, {
-                    username: options.username,
-                    apiKey: apiKey,
-                    word,
-                }).href,
-                method: "POST",
-            })
+            await requestUrlChecked(
+                {
+                    url: sUrl(`${options.serverUrl}/v2/words/delete`, {
+                        username: options.username,
+                        apiKey: apiKey,
+                        word,
+                    }).href,
+                    method: "POST",
+                },
+                null,
+            )
         ).json as JsonValue;
         return jsonPath<boolean>("$.deleted@boolean()", res);
     } catch (e) {
@@ -241,22 +258,52 @@ class SynonymDe implements SynonymApi {
 
 export const SYNONYMS: { [key: string]: SynonymApi } = { en: new SynonymEn(), de: new SynonymDe() };
 
-async function requestUrlChecked(request: RequestUrlParam): Promise<RequestUrlResponse> {
+export class RequestError extends Error {
+    constructor(message: string, public readonly retryable: boolean, options?: ErrorOptions) {
+        super(message, options);
+    }
+}
+
+export function isRetryableError(error: unknown): boolean {
+    if (error instanceof RequestError) return error.retryable;
+    return error instanceof Error && error.cause != null && isRetryableError(error.cause);
+}
+
+async function requestUrlChecked(
+    request: RequestUrlParam,
+    timeout: number | null = 20000,
+): Promise<RequestUrlResponse> {
     let response: RequestUrlResponse;
+    let timer: number | undefined;
     try {
-        response = await requestUrl({ ...request, throw: false });
+        const pending = requestUrl({ ...request, throw: false });
+        // Mutations must settle before callers can safely send another mutation.
+        response = timeout === null
+            ? await pending
+            : await Promise.race([
+                pending,
+                new Promise<RequestUrlResponse>((_, reject) => {
+                    timer = window.setTimeout(() => reject(new Error("Request timed out")), timeout);
+                }),
+            ]);
     } catch (e) {
-        throw new Error(
+        throw new RequestError(
             `Request to LanguageTool failed: Please check your connection and server URL.\n${errorMessage(e)}`,
+            true,
             { cause: e },
         );
+    } finally {
+        if (timer !== undefined) window.clearTimeout(timer);
     }
     if (response.status === 504 || response.status === 503)
-        throw new Error(`Request to LanguageTool timed out. Please try again later.`);
+        throw new RequestError(`Request to LanguageTool timed out. Please try again later.`, true);
     if (response.status !== 200) {
         let message = response.text;
         if (message.length > 310) message = message.substring(0, 300) + "...";
-        throw new Error(`Request to LanguageTool failed ${response.status}:\n${message}`);
+        throw new RequestError(
+            `Request to LanguageTool failed ${response.status}:\n${message}`,
+            response.status === 408 || response.status === 429 || response.status >= 500,
+        );
     }
     return response;
 }

@@ -12,7 +12,14 @@ import {
 } from "obsidian";
 import { EditorView } from "@codemirror/view";
 import { ChangeSpec, StateEffect } from "@codemirror/state";
-import { endpointFromUrl, LTOptions, LTSettings, LTSettingsTab, SUGGESTIONS } from "./settings";
+import {
+    endpointFromUrl,
+    LTOptions,
+    LTSettings,
+    LTSettingsTab,
+    SettingsUpdateSource,
+    SUGGESTIONS,
+} from "./settings";
 import * as api from "./api";
 import { underlineExtension } from "./editor/extension";
 import {
@@ -22,8 +29,9 @@ import {
     clearUnderlinesInRange,
     underlineDecoration,
 } from "./editor/underlines";
-import { cmpIgnoreCase, setDifference, setIntersect, setUnion } from "./helpers";
+import { cmpIgnoreCase } from "./helpers";
 import * as markdown from "./markdown/parser";
+import { RefreshableTask } from "./refreshableTask";
 
 export default class LanguageToolPlugin extends Plugin {
     public settings: LTSettings;
@@ -33,6 +41,10 @@ export default class LanguageToolPlugin extends Plugin {
 
     public logs: string[] = [];
     private settingTab: LTSettingsTab;
+    private readonly languageTask: RefreshableTask;
+    private readonly dictionaryTask: RefreshableTask;
+    // Cached api key for dictionary tasks.
+    private dictionaryApiKey?: string | null;
 
     // Used to temporarily disable auto-checking errors
     public autoCheckSuppressErrorsUntil: number = 0;
@@ -42,12 +54,38 @@ export default class LanguageToolPlugin extends Plugin {
 
         this.settingTab = new LTSettingsTab(this.app, this);
         this.settings = new LTSettings(this.settingTab);
+        this.languageTask = new RefreshableTask(async isCurrent => {
+            const serverUrl = this.settings.options.serverUrl;
+            const languages = await api.languages(serverUrl);
+            if (isCurrent()) this.settingTab.setLanguages(languages);
+        }, {
+            shouldRetry: api.isRetryableError,
+            onError: error => console.error("Failed to load languages", error),
+        });
+        this.dictionaryTask = new RefreshableTask(
+            isCurrent => this.reconcileDictionary(isCurrent),
+            {
+                shouldRetry: api.isRetryableError,
+                onError: error => {
+                    this.pushLogs(error as Error);
+                    console.error("Failed to sync dictionary with LanguageTool", error);
+                },
+            },
+        );
     }
 
     public async onload(): Promise<void> {
         // Settings
         await this.settings.load();
-        await this.settingTab.load();
+        this.registerDomEvent(window, "online", () => {
+            this.ensureNetworkTasks();
+            this.languageTask.retry();
+            this.dictionaryTask.retry();
+        });
+        this.register(() => {
+            this.languageTask.dispose();
+            this.dictionaryTask.dispose();
+        });
         this.addSettingTab(this.settingTab);
 
         // Status bar
@@ -68,13 +106,12 @@ export default class LanguageToolPlugin extends Plugin {
         if (this.settings.options.injectProperties) this.injectProperties(true);
 
         // Spellcheck Dictionary
-        const dictionary: Set<string> = new Set(
-            this.settings.options.dictionary.map(w => w.trim()),
-        );
-        dictionary.delete("");
-        await this.settings.update({ dictionary: [...dictionary].sort(cmpIgnoreCase) });
-        // Sync with language tool
-        await this.syncDictionary();
+        await this.settings.update(current => {
+            const dictionary = new Set(current.dictionary.map(w => w.trim()));
+            dictionary.delete("");
+            return { dictionary: [...dictionary].sort(cmpIgnoreCase) };
+        });
+        this.ensureNetworkTasks();
     }
 
     public onunload() {
@@ -219,8 +256,9 @@ export default class LanguageToolPlugin extends Plugin {
                     effects: [clearMatchingUnderlines.of(m => m.text == match.text)],
                 });
 
-                let dictionary = [...this.settings.options.dictionary, match.text.trim()];
-                this.settings.update({ dictionary }).then(
+                this.settings.update(current => ({
+                    dictionary: [...current.dictionary, match.text.trim()],
+                })).then(
                     () => {},
                     e => {
                         console.error(e);
@@ -341,9 +379,9 @@ export default class LanguageToolPlugin extends Plugin {
                 subItem.setTitle("Add to dictionary");
                 subItem.setIcon("plus-with-circle");
                 subItem.onClick(async () => {
-                    let dict = [...this.settings.options.dictionary, match.text.trim()];
-                    dict.sort(cmpIgnoreCase);
-                    await this.settings.update({ dictionary: dict });
+                    await this.settings.update(current => ({
+                        dictionary: [...current.dictionary, match.text.trim()].sort(cmpIgnoreCase),
+                    }));
                     await this.syncDictionary();
                     editor.dispatch({
                         effects: [clearMatchingUnderlines.of(m => m.text === match.text)],
@@ -364,9 +402,9 @@ export default class LanguageToolPlugin extends Plugin {
                     subItem.setTitle("Disable rule");
                     subItem.setIcon("circle-off");
                     subItem.onClick(async () => {
-                        let disabledRules = [...this.settings.options.disabledRules, match.ruleId];
-                        disabledRules.sort(cmpIgnoreCase);
-                        await this.settings.update({ disabledRules });
+                        await this.settings.update(current => ({
+                            disabledRules: [...current.disabledRules, match.ruleId].sort(cmpIgnoreCase),
+                        }));
 
                         editor.dispatch({
                             effects: [clearMatchingUnderlines.of(m => m.ruleId === match.ruleId)],
@@ -654,59 +692,63 @@ export default class LanguageToolPlugin extends Plugin {
         if (this.logs.length > 10) this.logs.shift();
     }
 
-    public async onExternalSettingsChange() {
-        await this.settings.load();
+    public ensureNetworkTasks(): void {
+        const apiKey = this.settings.getApiKey();
+        if (apiKey !== this.dictionaryApiKey) {
+            this.dictionaryApiKey = apiKey;
+            this.dictionaryTask.invalidate();
+        }
+        void this.languageTask.ensure();
+        void this.dictionaryTask.ensure();
     }
 
-    /**
-     * Synchronizes with the LanguageTool dictionary,
-     * returning whether the local dictionary has been changed.
-     */
+    public onSettingsChanged(previous: Readonly<LTOptions>, source: SettingsUpdateSource = "local"): void {
+        const current = this.settings.options;
+        if (previous.serverUrl !== current.serverUrl) {
+            this.languageTask.invalidate();
+            this.settingTab.setLanguages([]);
+        }
+        const dictionaryChanged = JSON.stringify(previous.dictionary) !== JSON.stringify(current.dictionary);
+        if (source !== "local" && dictionaryChanged) this.settingTab.update();
+        const connectionChanged = previous.serverUrl !== current.serverUrl ||
+            previous.username !== current.username || previous.apikeySecret !== current.apikeySecret ||
+            previous.syncDictionary !== current.syncDictionary;
+        if (connectionChanged || (source !== "sync" && (dictionaryChanged ||
+            JSON.stringify(previous.pendingDictEdits) !== JSON.stringify(current.pendingDictEdits)))) {
+            this.dictionaryTask.invalidate();
+        }
+        this.ensureNetworkTasks();
+    }
+
+    public async onExternalSettingsChange() {
+        const previous = this.settings.options;
+        await this.settings.load();
+        this.onSettingsChanged(previous, "external");
+    }
+
     public async syncDictionary(): Promise<void> {
-        if (
-            !this.settings.options.syncDictionary ||
-            endpointFromUrl(this.settings.options.serverUrl) !== "premium"
-        ) {
-            // Nothing to do
-            return;
+        this.dictionaryTask.invalidate();
+        this.ensureNetworkTasks();
+        await this.dictionaryTask.ensure();
+    }
+
+    private async reconcileDictionary(isCurrent: () => boolean): Promise<void> {
+        if (!isCurrent()) return;
+        const options = this.settings.options;
+        const apiKey = this.settings.getApiKey();
+        const current = () => isCurrent() && apiKey === this.settings.getApiKey();
+        if (!options.syncDictionary || endpointFromUrl(options.serverUrl) !== "premium") return;
+
+        const edits = options.pendingDictEdits;
+        for (const edit of edits) {
+            if (!current()) return;
+            if (edit.present) await api.wordsAdd(options, apiKey, edit.word);
+            else await api.wordsDel(options, apiKey, edit.word);
         }
 
-        try {
-            const lastWords = new Set(this.settings.options.remoteDictionary);
-            let localWords = new Set(this.settings.options.dictionary);
-            let remoteWords = new Set(
-                await api.words(this.settings.options, this.settings.getApiKey()),
-            );
-
-            // words that have been removed locally
-            let localRemoved = setDifference(lastWords, localWords);
-            localRemoved = setIntersect(localRemoved, remoteWords);
-            for (const word of localRemoved) {
-                await api.wordsDel(this.settings.options, this.settings.getApiKey(), word);
-            }
-
-            // words that have been removed remotely
-            const remoteRemoved = setDifference(lastWords, remoteWords);
-
-            remoteWords = setDifference(remoteWords, localRemoved);
-            localWords = setDifference(localWords, remoteRemoved);
-
-            // words that have been added locally
-            const missingRemote = setDifference(localWords, remoteWords);
-            for (const word of missingRemote) {
-                await api.wordsAdd(this.settings.options, this.settings.getApiKey(), word);
-            }
-
-            // merge remaining words
-            const words = setUnion(remoteWords, localWords);
-            let dictionary = [...words].sort(cmpIgnoreCase);
-            await this.settings.update({ dictionary, remoteDictionary: dictionary });
-        } catch (e) {
-            const err = e as Error;
-            this.pushLogs(err);
-            new Notice(err.message, 30000);
-            console.error("Failed sync spellcheck with LanguageTool", e);
-        }
+        if (!current()) return;
+        const dictionary = [...new Set(await api.words(options, apiKey))].sort(cmpIgnoreCase);
+        if (current()) await this.settings.applyDictionarySync(dictionary, edits, current);
     }
 }
 

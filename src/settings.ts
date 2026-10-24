@@ -123,10 +123,21 @@ export function getEndpoint(url: string): Endpoint {
     return endpoints[endpointFromUrl(url)];
 }
 
+/** Edits to the dictionary that could be uploaded to LanguageTool yet */
+export interface DictEdit {
+    word: string;
+    /** add or remove from the dictionary */
+    present: boolean;
+    revision: number;
+}
+
+export type SettingsUpdateSource = "local" | "sync" | "external";
+
 /** Wrapper for LanguageTool settings */
 export class LTSettings {
     private _options: LTOptions;
     private tab: LTSettingsTab;
+    private updates: Promise<void> = Promise.resolve();
     constructor(tab: LTSettingsTab) {
         this.tab = tab;
         this._options = { ...DEFAULT_SETTINGS };
@@ -134,7 +145,32 @@ export class LTSettings {
     public get options(): Readonly<LTOptions> {
         return this._options;
     }
-    public async update(options: Partial<LTOptions>): Promise<void> {
+    public update(
+        options: Partial<LTOptions> | ((current: Readonly<LTOptions>) => Partial<LTOptions>),
+        source: SettingsUpdateSource = "local",
+    ): Promise<void> {
+        return this.enqueue(() =>
+            this.updateOptions(
+                typeof options === "function" ? options(this._options) : options,
+                source,
+            ),
+        );
+    }
+
+    /**
+     * UI callbacks and background sync can overlap while awaiting asynchronous disk I/O.
+     * Serialize the whole read-modify-save operation so each update uses the latest
+     * committed settings; serializing writes alone would still allow lost updates.
+     */
+    private enqueue(update: () => Promise<void>): Promise<void> {
+        const pending = this.updates.then(update);
+        this.updates = pending.catch(() => {});
+        return pending;
+    }
+    private async updateOptions(
+        options: Partial<LTOptions>,
+        source: SettingsUpdateSource,
+    ): Promise<void> {
         let newOptions = { ...options };
 
         // Merge languageVariety with existing values if provided
@@ -150,26 +186,68 @@ export class LTSettings {
         if (newOptions.endpoint != null && newOptions.endpoint !== "custom") {
             newOptions.serverUrl = endpoints[newOptions.endpoint].url;
         }
-        if (newOptions.endpoint != null || newOptions.serverUrl != null) {
-            // reload languages
-            console.debug("Endpoint reload:", newOptions.endpoint);
-            await this.tab.load();
-        }
-        if (newOptions.injectProperties != null) {
-            this.tab.plugin.injectProperties(newOptions.injectProperties);
-        }
 
         let updatedOptions = { ...this._options, ...newOptions };
+        if (
+            updatedOptions.serverUrl !== this._options.serverUrl ||
+            updatedOptions.username !== this._options.username
+        ) {
+            updatedOptions.pendingDictEdits = [];
+        }
+        if (!updatedOptions.syncDictionary) {
+            updatedOptions.pendingDictEdits = [];
+        } else if (!this._options.syncDictionary) {
+            updatedOptions.pendingDictEdits = [...new Set(updatedOptions.dictionary)].map(
+                (word, index) => ({ word, present: true, revision: index + 1 }),
+            );
+        } else if (source === "local" && newOptions.dictionary) {
+            const before = new Set(this._options.dictionary);
+            const after = new Set(updatedOptions.dictionary);
+            let edits = [...updatedOptions.pendingDictEdits];
+            let revision = edits.reduce((latest, edit) => Math.max(latest, edit.revision), 0);
+            for (const word of new Set([...before, ...after])) {
+                if (before.has(word) === after.has(word)) continue;
+                edits = edits.filter(edit => edit.word !== word);
+                edits.push({ word, present: after.has(word), revision: ++revision });
+            }
+            updatedOptions.pendingDictEdits = edits;
+        }
+
         // Only save if something has changed
         if (JSON.stringify(updatedOptions) !== JSON.stringify(this._options)) {
+            const previous = this._options;
+            await this.save(updatedOptions);
             this._options = updatedOptions;
-            await this.save(this._options);
+            if (newOptions.injectProperties != null) {
+                this.tab.plugin.injectProperties(newOptions.injectProperties);
+            }
+            this.tab.plugin.onSettingsChanged(previous, source);
         }
     }
 
-    public async load(): Promise<void> {
-        const options = await this.loadOptions();
-        this._options = { ...DEFAULT_SETTINGS, ...options };
+    public applyDictionarySync(
+        dictionary: string[],
+        acknowledged: DictEdit[],
+        isCurrent: () => boolean,
+    ): Promise<void> {
+        return this.enqueue(async () => {
+            // A local update ahead of this result may have invalidated the network run.
+            if (!isCurrent()) return;
+            const pendingDictEdits = this._options.pendingDictEdits.filter(
+                edit =>
+                    !acknowledged.some(
+                        done => done.word === edit.word && done.revision === edit.revision,
+                    ),
+            );
+            await this.updateOptions({ dictionary, pendingDictEdits: pendingDictEdits }, "sync");
+        });
+    }
+
+    public load(): Promise<void> {
+        return this.enqueue(async () => {
+            const options = await this.loadOptions();
+            this._options = { ...DEFAULT_SETTINGS, ...options };
+        });
     }
 
     public getApiKey(): string | null {
@@ -214,6 +292,29 @@ export class LTSettings {
         }
         if (!data.apikeySecret) data.apikeySecret = "";
 
+        // Migration: preserve unsynchronized edits before removing the remote snapshot.
+        if (!("pendingDictEdits" in data)) {
+            if (data.endpoint === "premium" && data.syncDictionary) {
+                const local = new Set(
+                    Array.isArray(data.dictionary) ? (data.dictionary as string[]) : [],
+                );
+                const remote = new Set(
+                    Array.isArray(data.remoteDictionary) ? (data.remoteDictionary as string[]) : [],
+                );
+                const edits: DictEdit[] = [];
+                for (const word of new Set([...local, ...remote])) {
+                    if (local.has(word) !== remote.has(word)) {
+                        edits.push({ word, present: local.has(word), revision: edits.length + 1 });
+                    }
+                }
+                data.pendingDictEdits = edits;
+            } else {
+                data.pendingDictEdits = [];
+            }
+        }
+        if (!data.syncDictionary) data.pendingDictEdits = [];
+        delete data.remoteDictionary;
+
         // Save if options were migrated
         if (snapshot !== JSON.stringify(data)) {
             await this.tab.plugin.saveData({ ...DEFAULT_SETTINGS, ...data });
@@ -224,7 +325,15 @@ export class LTSettings {
 
     protected async save(options: LTOptions): Promise<void> {
         console.debug("saving language tool settings");
-        await this.tab.plugin.saveData(options);
+        try {
+            await this.tab.plugin.saveData(options);
+        } catch (error) {
+            throw new api.RequestError(
+                "Saving dictionary edits failed; synchronization will retry.",
+                true,
+                { cause: error },
+            );
+        }
     }
 }
 
@@ -244,8 +353,8 @@ export interface LTOptions {
 
     dictionary: string[];
     syncDictionary: boolean;
-    /// Snapshot of the last synchronization
-    remoteDictionary: string[];
+
+    pendingDictEdits: DictEdit[];
 
     pickyMode: boolean;
     enabledCategories: string[];
@@ -271,7 +380,7 @@ export const DEFAULT_SETTINGS: LTOptions = {
     ),
     dictionary: [],
     syncDictionary: false,
-    remoteDictionary: [],
+    pendingDictEdits: [],
     pickyMode: false,
     enabledCategories: [],
     disabledCategories: [],
@@ -327,16 +436,9 @@ export class LTSettingsTab extends PluginSettingTab {
         this.plugin = plugin;
     }
 
-    async load(): Promise<void> {
-        if (this.plugin.settings.options.serverUrl) {
-            try {
-                this.languages = await api.languages(this.plugin.settings.options.serverUrl);
-                this.update();
-            } catch (e) {
-                console.error("Failed to load languages:", e);
-                new Notice("Failed to load languages", 5000);
-            }
-        }
+    setLanguages(languages: api.Language[]): void {
+        this.languages = languages;
+        this.update();
     }
 
     getControlValue(key: string): unknown {
@@ -355,7 +457,6 @@ export class LTSettingsTab extends PluginSettingTab {
             const lang = key.split(".")[1];
             await this.plugin.settings.update({
                 languageVariety: {
-                    ...this.plugin.settings.options.languageVariety,
                     [lang]: value as string,
                 },
             });
@@ -367,14 +468,20 @@ export class LTSettingsTab extends PluginSettingTab {
 
     public getSettingDefinitions(): SettingDefinitionItem[] {
         console.debug("getSettingDefinitions");
+        this.plugin.ensureNetworkTasks();
 
         const sortedStrList = (
             name: string,
-            key: string,
+            key:
+                | "dictionary"
+                | "enabledCategories"
+                | "disabledCategories"
+                | "enabledRules"
+                | "disabledRules",
             validate?: (v: string) => string | void,
             onUpdate?: () => void,
         ): SettingDefinitionList => {
-            const values = this.plugin.settings.options[key as keyof LTOptions];
+            const values = this.plugin.settings.options[key];
             if (!Array.isArray(values)) throw new Error(`Expected ${key} to be an array`);
 
             return {
@@ -389,10 +496,12 @@ export class LTSettingsTab extends PluginSettingTab {
                             this.app,
                             "Add item",
                             v => {
-                                const newVals = new Set(values);
-                                newVals.add(v);
                                 this.plugin.settings
-                                    .update({ [key]: [...newVals].sort(cmpIgnoreCase) })
+                                    .update(current => ({
+                                        [key]: [...new Set([...current[key], v])].sort(
+                                            cmpIgnoreCase,
+                                        ),
+                                    }))
                                     .then(
                                         () => {
                                             this.update();
@@ -407,15 +516,18 @@ export class LTSettingsTab extends PluginSettingTab {
                     },
                 },
                 onDelete: index => {
-                    const copy = [...values];
-                    copy.splice(index, 1);
-                    this.plugin.settings.update({ [key]: copy }).then(
-                        () => {
-                            this.update();
-                            onUpdate?.();
-                        },
-                        e => console.error("Failed to update settings", e),
-                    );
+                    const removed = values[index];
+                    this.plugin.settings
+                        .update(current => ({
+                            [key]: current[key].filter(value => value !== removed),
+                        }))
+                        .then(
+                            () => {
+                                this.update();
+                                onUpdate?.();
+                            },
+                            e => console.error("Failed to update settings", e),
+                        );
                 },
             };
         };
@@ -479,6 +591,7 @@ export class LTSettingsTab extends PluginSettingTab {
                             .setValue(settings.options.apikeySecret)
                             .onChange(async value => {
                                 await settings.update({ apikeySecret: value });
+                                this.plugin.ensureNetworkTasks();
                             }),
                     );
                 },
