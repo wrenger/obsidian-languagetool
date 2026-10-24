@@ -146,7 +146,6 @@ class AnnotationVisitor {
             case "yaml":
             case "code":
             case "math":
-            case "inlineMath":
             case "html":
             case "image":
             case "imageReference":
@@ -165,8 +164,11 @@ class AnnotationVisitor {
                 node.children.forEach(child => this.visitRoot(child));
                 this.output.pushMarkup("", "\n\n");
                 break;
+            case "inlineMath":
             case "inlineCode":
-                this.output.pushMarkup(emptyMarkup(startOffset, endOffset), node.value);
+                // Give this a placeholder so that sentences have a subject/object.
+                // Otherwise the grammar checking might become confused with the sentence structure.
+                this.output.pushMarkup(emptyMarkup(startOffset, endOffset), "DUMMY");
                 this.offset = endOffset;
                 break;
             case "break":
