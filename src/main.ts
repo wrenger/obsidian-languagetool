@@ -29,7 +29,7 @@ import {
     clearUnderlinesInRange,
     underlineDecoration,
 } from "./editor/underlines";
-import { cmpIgnoreCase } from "./helpers";
+import { categoryCssClass, cmpIgnoreCase } from "./helpers";
 import * as markdown from "./markdown/parser";
 import { RefreshableTask } from "./refreshableTask";
 
@@ -250,6 +250,8 @@ export default class LanguageToolPlugin extends Plugin {
 
                 let match = singleMatchAtCursor(editor, 0);
                 if (!match) return checking ? false : undefined;
+                let trimmed = match.text.trim();
+                if (trimmed.contains(" ") || trimmed.length === 0) return checking ? false : undefined;
                 if (checking) return true;
 
                 editorView.dispatch({
@@ -374,7 +376,9 @@ export default class LanguageToolPlugin extends Plugin {
 
         submenu.addSeparator();
 
-        if (match.categoryId === "TYPOS") {
+        // single word lints
+        let trimmed = match.text.trim();
+        if (!trimmed.contains(" ") && trimmed.length > 0) {
             submenu.addItem(subItem => {
                 subItem.setTitle("Add to dictionary");
                 subItem.setIcon("plus-with-circle");
@@ -388,7 +392,9 @@ export default class LanguageToolPlugin extends Plugin {
                     });
                 });
             });
-        } else {
+        }
+        // Don't show this for obvious typos
+        if (categoryCssClass(match.categoryId, match.ruleId) !== "lt-major") {
             submenu.addItem(subItem => {
                 subItem.setTitle("Ignore suggestion");
                 subItem.setIcon("cross");
