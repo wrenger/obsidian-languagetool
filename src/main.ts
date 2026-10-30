@@ -660,7 +660,10 @@ export default class LanguageToolPlugin extends Plugin {
                 // Fixes a bug where the match is outside the document
                 if (match.range.to > editor.state.doc.length) continue;
                 // Ignore typos that are in the spellcheck dictionary
-                if (lintClass(match.categoryId, match.ruleId) === "lt-major" && spellcheckDictionary.includes(match.text))
+                if (
+                    lintClass(match.categoryId, match.ruleId) === "lt-major" &&
+                    spellcheckDictionary.includes(match.text.trim())
+                )
                     continue;
 
                 // Ignore whitespace lints inside tables

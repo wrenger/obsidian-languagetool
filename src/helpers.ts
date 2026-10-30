@@ -4,8 +4,8 @@ export type LintClass = "lt-minor" | "lt-style" | "lt-major";
 export function lintClass(categoryId: string, ruleId: string): LintClass {
     // Newer form of spelling errors (probably using LLMs in the backend)
     if (
-        ruleId.contains("SPELLING") ||
-        (ruleId.startsWith("QB_NEW_EN_") && ruleId.contains("ORTHOGRAPHY"))
+        ruleId.includes("SPELLING") ||
+        (ruleId.startsWith("QB_NEW_EN_") && ruleId.includes("ORTHOGRAPHY"))
     ) {
         return "lt-major";
     }

@@ -72,14 +72,20 @@ afterEach(() => {
     else Reflect.deleteProperty(globalThis, "window");
 });
 
-test.each(["TYPOS", "GRAMMAR", "STYLE"])(
-    "dictionary entries suppress %s matches across repeated checks without sync",
-    async categoryId => {
+test.each([
+    { categoryId: "TYPOS", ruleId: "TEST_RULE", expectedUnderlines: 0 },
+    { categoryId: "GRAMMAR", ruleId: "TEST_SPELLING_RULE", expectedUnderlines: 0 },
+    { categoryId: "STYLE", ruleId: "QB_NEW_EN_TEST_ORTHOGRAPHY", expectedUnderlines: 0 },
+    { categoryId: "GRAMMAR", ruleId: "TEST_RULE", expectedUnderlines: 1 },
+    { categoryId: "STYLE", ruleId: "TEST_RULE", expectedUnderlines: 1 },
+])(
+    "dictionary entries filter only spelling errors across repeated checks without sync: %o",
+    async ({ categoryId, ruleId, expectedUnderlines }) => {
         const match = {
             text: " word ",
             range: { from: 0, to: 6 },
             categoryId,
-            ruleId: "TEST_RULE",
+            ruleId,
             title: "",
             message: "",
             replacements: [],
@@ -100,7 +106,7 @@ test.each(["TYPOS", "GRAMMAR", "STYLE"])(
         await plugin.settings.update({ dictionary: ["word"], syncDictionary: false });
         for (let check = 0; check < 2; check++) {
             await plugin.runDetection(editor);
-            expect(underlines).toBe(0);
+            expect(underlines).toBe(expectedUnderlines);
         }
         expect(api.wordsAdd).not.toHaveBeenCalled();
     },
