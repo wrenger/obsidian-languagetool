@@ -67,6 +67,16 @@ You can generate your API key at <https://languagetool.org/editor/settings/acces
 
 Configure your email, API key, and the new URL (https://api.languagetoolplus.com) in the plugin settings
 
+## Preferred languages
+
+Under **Language → Preferred languages**, select multiple languages to favor during automatic detection. These are hints, not a restriction: other languages may still be detected. Static language selection takes precedence; regional spelling remains controlled by **Language varieties**. Detection bias depends on the server's language-detection setup (for example, fastText).
+
+## Tests
+
+- `bun test` runs unit tests and real-server integration tests together. `bun run test` runs the same suites in separate processes.
+- `bun run test:unit` runs only unit tests, without Java or network access.
+- `bun run test:integration` requires Java 21+, `curl`, and `unzip`. On the first run it downloads the latest LanguageTool snapshot (roughly 263 MB) into ignored `resources/`, then starts a temporary local server and shuts it down after testing. Later runs reuse the cached download. Delete `resources/LanguageTool-latest-snapshot.zip` and `resources/languagetool-integration-server/` to fetch a newer snapshot.
+
 ## Manually Installing the Plugin
 
 - Run `bun install` and `bun run build` in the root directory of the repository.

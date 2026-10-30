@@ -23,6 +23,8 @@ export default tseslint.config(
         "package.json",
         "main.js",
         "src/test",
+        "test",
+        "resources",
         "scripts",
     ]),
 );

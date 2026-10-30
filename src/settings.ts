@@ -349,6 +349,7 @@ export interface LTOptions {
 
     motherTongue: string;
     staticLanguage: string;
+    preferredLanguages: string[];
     languageVariety: Record<string, string>;
 
     dictionary: string[];
@@ -375,6 +376,7 @@ export const DEFAULT_SETTINGS: LTOptions = {
     synonyms: "",
     motherTongue: "",
     staticLanguage: "",
+    preferredLanguages: [],
     languageVariety: Object.fromEntries(
         LANGUAGE_VARIETIES.map(v => [v.code, Object.keys(v.variants)[0]]),
     ),
@@ -442,6 +444,9 @@ export class LTSettingsTab extends PluginSettingTab {
     }
 
     getControlValue(key: string): unknown {
+        if (key.startsWith("preferredLanguages.")) {
+            return this.plugin.settings.options.preferredLanguages.includes(key.split(".")[1]);
+        }
         if (key.startsWith("languageVariety.")) {
             const lang = key.split(".")[1];
             return this.plugin.settings.options.languageVariety?.[lang];
@@ -453,13 +458,16 @@ export class LTSettingsTab extends PluginSettingTab {
     }
 
     async setControlValue(key: string, value: unknown): Promise<void> {
-        if (key.startsWith("languageVariety.")) {
+        if (key.startsWith("preferredLanguages.")) {
+            const language = key.split(".")[1];
+            await this.plugin.settings.update(current => ({
+                preferredLanguages: value
+                    ? [...new Set([...current.preferredLanguages, language])]
+                    : current.preferredLanguages.filter(code => code !== language),
+            }));
+        } else if (key.startsWith("languageVariety.")) {
             const lang = key.split(".")[1];
-            await this.plugin.settings.update({
-                languageVariety: {
-                    [lang]: value as string,
-                },
-            });
+            await this.plugin.settings.update({ languageVariety: { [lang]: value as string } });
         } else {
             await this.plugin.settings.update({ [key]: value });
         }
@@ -658,6 +666,40 @@ export class LTSettingsTab extends PluginSettingTab {
                                 ]) as Record<string, string>;
                             })(),
                         },
+                    },
+                    {
+                        type: "page",
+                        name: "Preferred languages",
+                        desc: "Favor these languages during automatic detection. Other languages can still be detected.",
+                        items: [
+                            {
+                                type: "group",
+                                search: {
+                                    placeholder: "Search languages",
+                                    match: (definition, query) =>
+                                        definition.name
+                                            .toLocaleLowerCase()
+                                            .includes(query.trim().toLocaleLowerCase()),
+                                },
+                                items: this.languages
+                                    .filter(
+                                        (language, index, languages) =>
+                                            languages.findIndex(
+                                                candidate => candidate.code === language.code,
+                                            ) === index,
+                                    )
+                                    .sort((a, b) => cmpIgnoreCase(a.name, b.name))
+                                    .map(language => ({
+                                        name: language.name,
+                                        control: {
+                                            type: "toggle" as const,
+                                            key: `preferredLanguages.${language.code}`,
+                                            disabled: () => !!settings.options.staticLanguage,
+                                        },
+                                    })),
+                            },
+                        ],
+                        visible: () => !settings.options.staticLanguage,
                     },
                     {
                         type: "page",

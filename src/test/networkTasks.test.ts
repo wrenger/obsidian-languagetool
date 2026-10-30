@@ -1,3 +1,4 @@
+import { pluginStorage } from "./obsidian";
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test";
 import type { App, PluginManifest, RequestUrlResponse } from "obsidian";
 import type { RefreshableTask } from "../refreshableTask";
@@ -6,27 +7,6 @@ import type { LTOptions } from "../settings";
 let saved: LTOptions | undefined;
 let remote: Set<string>;
 
-mock.module("obsidian", () => ({
-    Plugin: class {
-        constructor(public app: App, public manifest: PluginManifest) {}
-        async saveData(data: LTOptions) { saved = structuredClone(data); }
-        async loadData() { return structuredClone(saved); }
-    },
-    PluginSettingTab: class {
-        constructor(public app: App, public plugin: unknown) {}
-        update() {}
-    },
-    Modal: class {},
-    Notice: class {},
-    SecretComponent: class {},
-    Setting: class {},
-    ButtonComponent: class {},
-    MarkdownView: class {},
-    Menu: class {},
-    setIcon() {},
-    setTooltip() {},
-    requestUrl() { throw new Error("Unexpected network request in test"); },
-}));
 
 const { default: LanguageToolPlugin } = await import("../main");
 const api = await import("../api");
@@ -65,6 +45,10 @@ beforeEach(async () => {
         configurable: true,
         value: { setTimeout: mock(() => 1), clearTimeout: mock(() => {}) },
     });
+    spyOn(pluginStorage, "saveData").mockImplementation(async data => {
+        saved = structuredClone(data) as LTOptions;
+    });
+    spyOn(pluginStorage, "loadData").mockImplementation(async () => structuredClone(saved));
     spyOn(console, "error").mockImplementation(() => {});
     spyOn(api, "languages").mockResolvedValue([]);
     mockRemote();
@@ -262,7 +246,23 @@ test("updates serialize and reject sync results made obsolete while queued", asy
     expect(saved!.pendingDictEdits).toEqual([]);
 });
 
+test("preferred language toggles persist multiple languages without duplicates", async () => {
+    const tab = new LTSettingsTab(plugin.app, plugin);
+    expect(tab.getControlValue("preferredLanguages.de")).toBe(false);
+    await Promise.all([
+        tab.setControlValue("preferredLanguages.de", true),
+        tab.setControlValue("preferredLanguages.fr", true),
+    ]);
+    await tab.setControlValue("preferredLanguages.de", true);
+    expect(saved!.preferredLanguages).toEqual(["de", "fr"]);
+    expect(tab.getControlValue("preferredLanguages.fr")).toBe(true);
+    await tab.setControlValue("preferredLanguages.de", false);
+    expect(saved!.preferredLanguages).toEqual(["fr"]);
+    expect(tab.getControlValue("preferredLanguages.de")).toBe(false);
+});
+
 test.each([
+    "preferredLanguages",
     "dictionary",
     "enabledCategories",
     "disabledCategories",

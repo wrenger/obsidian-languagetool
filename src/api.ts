@@ -56,7 +56,11 @@ export async function check(
     if (options.enabledRules.length) params.enabledRules = options.enabledRules.join(",");
     if (options.disabledRules.length) params.disabledRules = options.disabledRules.join(",");
 
-    if (lang == "auto") params.preferredVariants = Object.values(options.languageVariety).join(",");
+    if (lang == "auto") {
+        params.preferredVariants = Object.values(options.languageVariety).join(",");
+        if (options.preferredLanguages.length)
+            params.preferredLanguages = options.preferredLanguages.join(",");
+    }
 
     const endpointType = endpointFromUrl(options.serverUrl);
     if (endpointType !== "public" && apiKey && options.username) {
