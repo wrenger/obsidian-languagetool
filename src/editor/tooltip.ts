@@ -1,6 +1,6 @@
 import { EditorView, Tooltip, hoverTooltip } from "@codemirror/view";
 import { Extension } from "@codemirror/state";
-import { categoryCssClass } from "../helpers";
+import { lintClass } from "../helpers";
 import { ButtonComponent, setIcon } from "obsidian";
 import { default as LanguageToolPlugin } from "../main";
 import { clearUnderlinesInRange, underlineDecoration, clearMatchingUnderlines } from "./underlines";
@@ -16,7 +16,7 @@ function createTooltip(
     const replacements = match.replacements.slice(0, SUGGESTIONS / 2);
     const category = match.categoryId;
     const ruleId = match.ruleId;
-    const categoryClass = categoryCssClass(category, ruleId);
+    const categoryClass = lintClass(category, ruleId);
 
     return createDiv({ cls: ["lt-tooltip", categoryClass] }, root => {
         if (match.title) root.createSpan({ cls: "lt-title", text: match.title });

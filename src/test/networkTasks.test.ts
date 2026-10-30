@@ -1,5 +1,8 @@
 import { pluginStorage } from "./obsidian";
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test";
+import { EditorState, StateEffect } from "@codemirror/state";
+import type { EditorView } from "@codemirror/view";
+import { addUnderline } from "../editor/underlines";
 import type { App, PluginManifest, RequestUrlResponse } from "obsidian";
 import type { RefreshableTask } from "../refreshableTask";
 import type { LTOptions } from "../settings";
@@ -68,6 +71,40 @@ afterEach(() => {
     if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
     else Reflect.deleteProperty(globalThis, "window");
 });
+
+test.each(["TYPOS", "GRAMMAR", "STYLE"])(
+    "dictionary entries suppress %s matches across repeated checks without sync",
+    async categoryId => {
+        const match = {
+            text: " word ",
+            range: { from: 0, to: 6 },
+            categoryId,
+            ruleId: "TEST_RULE",
+            title: "",
+            message: "",
+            replacements: [],
+        };
+        spyOn(api, "check").mockResolvedValue([match]);
+        spyOn(plugin, "getActiveFileSettings").mockImplementation(() => plugin.settings.options);
+        let underlines = 0;
+        const editor = {
+            state: EditorState.create({ doc: " word " }),
+            dispatch: (transaction: { effects: StateEffect<unknown>[] }) => {
+                underlines = transaction.effects.filter(effect => effect.is(addUnderline)).length;
+            },
+        } as unknown as EditorView;
+
+        await plugin.runDetection(editor);
+        expect(underlines).toBe(1);
+
+        await plugin.settings.update({ dictionary: ["word"], syncDictionary: false });
+        for (let check = 0; check < 2; check++) {
+            await plugin.runDetection(editor);
+            expect(underlines).toBe(0);
+        }
+        expect(api.wordsAdd).not.toHaveBeenCalled();
+    },
+);
 
 test("migrates unsynchronized edits from the remote snapshot", async () => {
     spyOn(plugin, "loadData").mockResolvedValue({

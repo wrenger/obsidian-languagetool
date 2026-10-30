@@ -1,7 +1,7 @@
-export type CategoryClass = "lt-minor" | "lt-style" | "lt-major";
+export type LintClass = "lt-minor" | "lt-style" | "lt-major";
 
 // Assign a CSS class based on a rule's category ID
-export function categoryCssClass(categoryId: string, ruleId: string): CategoryClass {
+export function lintClass(categoryId: string, ruleId: string): LintClass {
     // Newer form of spelling errors (probably using LLMs in the backend)
     if (
         ruleId.contains("SPELLING") ||
@@ -45,6 +45,10 @@ export function setIntersect<T>(setA: Set<T>, setB: Set<T>): Set<T> {
         }
     }
     return intersection;
+}
+
+export function isWord(text: string): boolean {
+    return /^(?=.*\p{L})[\P{P}_-](?:\S*[\P{P}_-])?$/u.test(text.trim());
 }
 
 export function cmpIgnoreCase(a: string, b: string): number {

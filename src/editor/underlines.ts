@@ -1,6 +1,6 @@
 import { EditorView, Decoration, DecorationSet } from "@codemirror/view";
 import { StateField, StateEffect } from "@codemirror/state";
-import { categoryCssClass } from "../helpers";
+import { lintClass } from "../helpers";
 import * as api from "../api";
 
 export const ignoreListRegEx = /(frontmatter|code|math|templater|blockid|hashtag)/;
@@ -47,7 +47,7 @@ export const underlineDecoration = StateField.define<DecorationSet>({
                 underlines = underlines.update({
                     add: [
                         Decoration.mark({
-                            class: `lt-underline ${categoryCssClass(underline.categoryId, underline.ruleId)}`,
+                            class: `lt-underline ${lintClass(underline.categoryId, underline.ruleId)}`,
                             underline,
                         }).range(range.from, range.to),
                     ],

@@ -29,7 +29,7 @@ import {
     clearUnderlinesInRange,
     underlineDecoration,
 } from "./editor/underlines";
-import { categoryCssClass, cmpIgnoreCase } from "./helpers";
+import { lintClass, cmpIgnoreCase, isWord } from "./helpers";
 import * as markdown from "./markdown/parser";
 import { RefreshableTask } from "./refreshableTask";
 
@@ -54,14 +54,17 @@ export default class LanguageToolPlugin extends Plugin {
 
         this.settingTab = new LTSettingsTab(this.app, this);
         this.settings = new LTSettings(this.settingTab);
-        this.languageTask = new RefreshableTask(async isCurrent => {
-            const serverUrl = this.settings.options.serverUrl;
-            const languages = await api.languages(serverUrl);
-            if (isCurrent()) this.settingTab.setLanguages(languages);
-        }, {
-            shouldRetry: api.isRetryableError,
-            onError: error => console.error("Failed to load languages", error),
-        });
+        this.languageTask = new RefreshableTask(
+            async isCurrent => {
+                const serverUrl = this.settings.options.serverUrl;
+                const languages = await api.languages(serverUrl);
+                if (isCurrent()) this.settingTab.setLanguages(languages);
+            },
+            {
+                shouldRetry: api.isRetryableError,
+                onError: error => console.error("Failed to load languages", error),
+            },
+        );
         this.dictionaryTask = new RefreshableTask(
             isCurrent => this.reconcileDictionary(isCurrent),
             {
@@ -250,23 +253,22 @@ export default class LanguageToolPlugin extends Plugin {
 
                 let match = singleMatchAtCursor(editor, 0);
                 if (!match) return checking ? false : undefined;
-                let trimmed = match.text.trim();
-                if (trimmed.contains(" ") || trimmed.length === 0) return checking ? false : undefined;
+                if (!isWord(match.text)) return checking ? false : undefined;
                 if (checking) return true;
 
                 editorView.dispatch({
                     effects: [clearMatchingUnderlines.of(m => m.text == match.text)],
                 });
 
-                this.settings.update(current => ({
-                    dictionary: [...current.dictionary, match.text.trim()],
-                })).then(
-                    () => {},
-                    e => {
-                        console.error(e);
-                        this.pushLogs(e as Error);
-                    },
-                );
+                this.settings
+                    .update(current => ({ dictionary: [...current.dictionary, match.text.trim()] }))
+                    .then(
+                        () => {},
+                        e => {
+                            console.error(e);
+                            this.pushLogs(e as Error);
+                        },
+                    );
             },
         });
     }
@@ -377,8 +379,7 @@ export default class LanguageToolPlugin extends Plugin {
         submenu.addSeparator();
 
         // single word lints
-        let trimmed = match.text.trim();
-        if (!trimmed.contains(" ") && trimmed.length > 0) {
+        if (isWord(match.text)) {
             submenu.addItem(subItem => {
                 subItem.setTitle("Add to dictionary");
                 subItem.setIcon("plus-with-circle");
@@ -394,7 +395,7 @@ export default class LanguageToolPlugin extends Plugin {
             });
         }
         // Don't show this for obvious typos
-        if (categoryCssClass(match.categoryId, match.ruleId) !== "lt-major") {
+        if (lintClass(match.categoryId, match.ruleId) !== "lt-major") {
             submenu.addItem(subItem => {
                 subItem.setTitle("Ignore suggestion");
                 subItem.setIcon("cross");
@@ -409,7 +410,9 @@ export default class LanguageToolPlugin extends Plugin {
                     subItem.setIcon("circle-off");
                     subItem.onClick(async () => {
                         await this.settings.update(current => ({
-                            disabledRules: [...current.disabledRules, match.ruleId].sort(cmpIgnoreCase),
+                            disabledRules: [...current.disabledRules, match.ruleId].sort(
+                                cmpIgnoreCase,
+                            ),
                         }));
 
                         editor.dispatch({
@@ -657,7 +660,7 @@ export default class LanguageToolPlugin extends Plugin {
                 // Fixes a bug where the match is outside the document
                 if (match.range.to > editor.state.doc.length) continue;
                 // Ignore typos that are in the spellcheck dictionary
-                if (match.categoryId === "TYPOS" && spellcheckDictionary.includes(match.text))
+                if (lintClass(match.categoryId, match.ruleId) === "lt-major" && spellcheckDictionary.includes(match.text))
                     continue;
 
                 // Ignore whitespace lints inside tables
@@ -708,19 +711,30 @@ export default class LanguageToolPlugin extends Plugin {
         void this.dictionaryTask.ensure();
     }
 
-    public onSettingsChanged(previous: Readonly<LTOptions>, source: SettingsUpdateSource = "local"): void {
+    public onSettingsChanged(
+        previous: Readonly<LTOptions>,
+        source: SettingsUpdateSource = "local",
+    ): void {
         const current = this.settings.options;
         if (previous.serverUrl !== current.serverUrl) {
             this.languageTask.invalidate();
             this.settingTab.setLanguages([]);
         }
-        const dictionaryChanged = JSON.stringify(previous.dictionary) !== JSON.stringify(current.dictionary);
+        const dictionaryChanged =
+            JSON.stringify(previous.dictionary) !== JSON.stringify(current.dictionary);
         if (source !== "local" && dictionaryChanged) this.settingTab.update();
-        const connectionChanged = previous.serverUrl !== current.serverUrl ||
-            previous.username !== current.username || previous.apikeySecret !== current.apikeySecret ||
+        const connectionChanged =
+            previous.serverUrl !== current.serverUrl ||
+            previous.username !== current.username ||
+            previous.apikeySecret !== current.apikeySecret ||
             previous.syncDictionary !== current.syncDictionary;
-        if (connectionChanged || (source !== "sync" && (dictionaryChanged ||
-            JSON.stringify(previous.pendingDictEdits) !== JSON.stringify(current.pendingDictEdits)))) {
+        if (
+            connectionChanged ||
+            (source !== "sync" &&
+                (dictionaryChanged ||
+                    JSON.stringify(previous.pendingDictEdits) !==
+                        JSON.stringify(current.pendingDictEdits)))
+        ) {
             this.dictionaryTask.invalidate();
         }
         this.ensureNetworkTasks();

@@ -7,7 +7,7 @@
   "scripts": {
     "build": "bun run scripts/build.ts",
     "test": "bun test",
-    "test:unit": "bun test ./src/test/markdown.test.ts ./src/test/networkTasks.test.ts ./src/test/refreshableTask.test.ts",
+    "test:unit": "bun test ./src/test/helpers.test.ts ./src/test/markdown.test.ts ./src/test/networkTasks.test.ts ./src/test/refreshableTask.test.ts",
     "test:integration": "bun test ./src/test/languagetool.test.ts",
     "version": "bun run scripts/version-bump.ts && git add manifest.json versions.json",
     "lint": "bunx eslint ."
