@@ -27,6 +27,12 @@ function createTooltip(
                 for (const btnText of replacements) {
                     const button = new ButtonComponent(container);
                     button.setButtonText(btnText || "(delete)");
+                    button.buttonEl.addEventListener("mousedown", event => {
+                        if (event.button !== 0) return;
+                        // Keep the editor focused so the tooltip survives until click.
+                        event.preventDefault();
+                        event.stopPropagation();
+                    });
                     button.onClick(() => {
                         view.dispatch({
                             changes: [{ ...range, insert: btnText }],
